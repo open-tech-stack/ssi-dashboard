@@ -1,42 +1,17 @@
 // services/core/cookies.service.ts
 /**
- * Gestion centralisée des cookies d'authentification.
- * Les tokens sont stockés dans des cookies pour être accessibles
- * côté serveur (middleware, SSR).
- *
- * ⚠️ Pour un MVP admin interne. En production, préférer des cookies
- * httpOnly posés par le backend.
+ * Gestion du cookie "user" côté front.
  */
 
 import Cookies from 'js-cookie';
 
-const KEYS = {
-  accessToken: 'ssi.accessToken',
-  refreshToken: 'ssi.refreshToken',
-  user: 'ssi.user',
-} as const;
+const USER_KEY = 'ssi.user';
 
-const COOKIE_OPTIONS: Cookies.CookieAttributes = {
-  expires: 7, // jours
-  sameSite: 'Lax',
-  // secure: true, // à activer en production HTTPS
-};
-
-export const accessTokenCookie = {
-  get: () => Cookies.get(KEYS.accessToken) ?? null,
-  set: (v: string) => Cookies.set(KEYS.accessToken, v, COOKIE_OPTIONS),
-  clear: () => Cookies.remove(KEYS.accessToken),
-};
-
-export const refreshTokenCookie = {
-  get: () => Cookies.get(KEYS.refreshToken) ?? null,
-  set: (v: string) => Cookies.set(KEYS.refreshToken, v, COOKIE_OPTIONS),
-  clear: () => Cookies.remove(KEYS.refreshToken),
-};
+const isProd = process.env.NODE_ENV === 'production';
 
 export const userCookie = {
   get: <T = unknown>(): T | null => {
-    const raw = Cookies.get(KEYS.user);
+    const raw = Cookies.get(USER_KEY);
     if (!raw) return null;
     try {
       return JSON.parse(raw) as T;
@@ -44,14 +19,22 @@ export const userCookie = {
       return null;
     }
   },
-  set: (user: unknown) => Cookies.set(KEYS.user, JSON.stringify(user), COOKIE_OPTIONS),
-  clear: () => Cookies.remove(KEYS.user),
-};
 
-export const authCookies = {
-  clearAll: () => {
-    accessTokenCookie.clear();
-    refreshTokenCookie.clear();
-    userCookie.clear();
+  /**
+    * Utilisé au login côté front, en complément du set côté backend.
+   */
+  set: (user: unknown) => {
+    Cookies.set(USER_KEY, JSON.stringify(user), {
+      expires: 7,
+      sameSite: 'Lax',
+      secure: isProd, // ✅ HTTP en dev, HTTPS en prod
+    });
+  },
+
+  /**
+   * Utilisé au logout côté front, en complément du clear côté backend.
+   */
+  clear: () => {
+    Cookies.remove(USER_KEY, { path: '/' });
   },
 };

@@ -29,11 +29,19 @@ export default function Header({ onMobileMenuOpen }: Props) {
     router.push('/login');
   };
 
+  // Nom affiché : fullName si dispo, sinon fallback générique.
+  // ⚠️ On n'affiche JAMAIS le `code` (secret d'authentification).
+  const displayName = user?.fullName?.trim() || 'Administrateur';
+  const initial = displayName.charAt(0).toUpperCase();
+
   return (
     <>
       <header
         className="flex h-16 shrink-0 items-center justify-between border-b px-4 md:px-6"
-        style={{ backgroundColor: colors.headerBg, borderColor: colors.border }}
+        style={{
+          backgroundColor: colors.headerBg,
+          borderColor: colors.border,
+        }}
       >
         {/* Mobile menu */}
         <button
@@ -96,10 +104,10 @@ export default function Header({ onMobileMenuOpen }: Props) {
             >
               <User className="h-4 w-4" style={{ color: colors.primary }} />
               <span
-                className="hidden text-xs font-bold md:block"
+                className="hidden max-w-[140px] truncate text-xs font-bold md:block"
                 style={{ color: colors.text }}
               >
-                {user?.code ?? 'Admin'}
+                {displayName}
               </span>
             </button>
 
@@ -116,22 +124,35 @@ export default function Header({ onMobileMenuOpen }: Props) {
                     borderColor: colors.border,
                   }}
                 >
+                  {/* En-tête : nom + rôle */}
                   <div
-                    className="border-b px-3 py-2"
+                    className="flex items-center gap-3 border-b px-3 py-3"
                     style={{ borderColor: colors.border }}
                   >
-                    <p
-                      className="text-xs font-bold"
-                      style={{ color: colors.text }}
+                    {/* Avatar avec initiale */}
+                    <div
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-black"
+                      style={{
+                        backgroundColor: colors.primary,
+                        color: colors.onPrimary,
+                      }}
                     >
-                      Connecté en tant qu'admin
-                    </p>
-                    <p
-                      className="mt-0.5 font-mono text-[10px] tracking-widest"
-                      style={{ color: colors.textMuted }}
-                    >
-                      {user?.code}
-                    </p>
+                      {initial}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p
+                        className="truncate text-xs font-bold"
+                        style={{ color: colors.text }}
+                      >
+                        {displayName}
+                      </p>
+                      <p
+                        className="truncate text-[10px] font-semibold tracking-widest"
+                        style={{ color: colors.textMuted }}
+                      >
+                        {user?.role === 'ADMIN' ? 'ADMINISTRATEUR' : 'MEMBRE'}
+                      </p>
+                    </div>
                   </div>
 
                   <button

@@ -128,3 +128,71 @@
     @apply font-sans;
   }
 }
+
+/* Ajoute à la fin de ton globals.css (ou dans @layer utilities) */
+@keyframes haloPulse {
+  0%, 100% {
+    transform: scale(1) translate(0, 0);
+    opacity: 0.6;
+  }
+  50% {
+    transform: scale(1.15) translate(2%, -2%);
+    opacity: 0.9;
+  }
+}
+
+@keyframes floatUp {
+  0% {
+    transform: translate(0, 0);
+  }
+  50% {
+    transform: translate(var(--drift, 20px), -40px);
+  }
+  100% {
+    transform: translate(0, 0);
+  }
+}
+
+/* =========================================================
+   Animated Background — keyframes & classes utilitaires
+   ========================================================= */
+
+@keyframes haloPulse {
+  0%, 100% {
+    transform: scale(1) translate(0, 0);
+    opacity: 0.6;
+  }
+  50% {
+    transform: scale(1.15) translate(2%, -2%);
+    opacity: 0.9;
+  }
+}
+
+@keyframes floatUp {
+  0% {
+    transform: translate(0, 0);
+  }
+  50% {
+    transform: translate(var(--drift, 20px), -40px);
+  }
+  100% {
+    transform: translate(0, 0);
+  }
+}
+
+/* Classes applicables via className (plus fiables que les valeurs arbitraires Tailwind) */
+.animate-halo-pulse {
+  animation: haloPulse 9s ease-in-out infinite;
+}
+
+.animate-float-up {
+  animation: floatUp 12s linear infinite;
+}
+
+/* Accessibilité : désactive toutes les animations si l'utilisateur le demande */
+@media (prefers-reduced-motion: reduce) {
+  .animate-halo-pulse,
+  .animate-float-up {
+    animation: none !important;
+  }
+}

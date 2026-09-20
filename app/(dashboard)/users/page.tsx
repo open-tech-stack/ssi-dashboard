@@ -98,7 +98,8 @@ export default function UsersPage() {
         key: 'personId',
         label: 'Personne',
         render: (value: string | null) => {
-          if (!value) return <span style={{ color: colors.textMuted }}>—</span>;
+          if (!value)
+            return <span style={{ color: colors.textMuted }}>—</span>;
           return (
             <span style={{ color: colors.text }}>
               {personNameById.get(value) ?? '—'}
@@ -140,12 +141,20 @@ export default function UsersPage() {
         icon: Trash2,
         label: 'Supprimer',
         onClick: async (row) => {
+          const personLabel = row.personId
+            ? personNameById.get(row.personId)
+            : null;
+          const label = personLabel
+            ? `l'utilisateur lié à ${personLabel}`
+            : `l'utilisateur ${row.id.slice(0, 8)}…`;
+
           if (
             !confirm(
-              `Supprimer l'utilisateur ${row.code} ? Cette action est réversible côté backend (soft delete).`,
+              `Supprimer ${label} ? Cette action est réversible côté backend (soft delete).`,
             )
           )
             return;
+
           try {
             await usersService.remove(row.id);
             setUsers((prev) => prev.filter((u) => u.id !== row.id));
@@ -156,7 +165,7 @@ export default function UsersPage() {
         className: 'hover:bg-red-500/10 hover:text-red-500',
       },
     ],
-    [],
+    [personNameById],
   );
 
   // ---- Handlers ----
@@ -186,7 +195,8 @@ export default function UsersPage() {
             className="mt-1 text-sm font-medium"
             style={{ color: colors.textSecondary }}
           >
-            Gérez les comptes et les codes d'accès des membres de l'église.
+            Gérez les comptes et les codes d&apos;accès des membres de
+            l&apos;église.
           </p>
         </div>
 

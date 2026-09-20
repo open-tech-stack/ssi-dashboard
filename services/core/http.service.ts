@@ -2,26 +2,21 @@
 /**
  * Client HTTP axios pour le dashboard.
  *
- * - Ajoute automatiquement l'access token dans chaque requête.
- * - Intercepte les 401 pour tenter un refresh automatique.
- * - Si le refresh échoue → on vide la session et on redirige vers /login.
+ * - Envoie automatiquement les cookies httpOnly (withCredentials).
+ * - Ajoute le header `X-Client: web` sur chaque requête pour que le
+ *   backend sache qu'il doit poser des cookies (et pas renvoyer les
+ *   tokens dans le body).
+ * - Intercepte les 401 pour tenter un refresh silencieux.
+ * - Si le refresh échoue → on notifie la session expirée (AuthContext)
+ *   qui redirige vers /login.
  *
- * Un système de "queue" empêche plusieurs refresh simultanés.
+ * ⚠️ Plus de gestion manuelle des tokens : ils sont httpOnly.
+ *    Le navigateur les transporte, on n'y touche jamais.
  */
 
-import axios, {
-  AxiosError,
-  AxiosInstance,
-  AxiosRequestConfig,
-  InternalAxiosRequestConfig,
-} from 'axios';
+import axios, { AxiosError, AxiosInstance } from 'axios';
 
 import { ENV } from '@/config/env';
-import {
-  accessTokenCookie,
-  authCookies,
-  refreshTokenCookie,
-} from '@/services/core/cookies.service';
 import { AUTH_ENDPOINTS } from '@/endpoints/auth.endpoints';
 
 // ------------------------------------------------------------------
@@ -30,6 +25,7 @@ import { AUTH_ENDPOINTS } from '@/endpoints/auth.endpoints';
 export const httpClient: AxiosInstance = axios.create({
   baseURL: ENV.API_URL,
   timeout: 20000,
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
     Accept: 'application/json',
@@ -37,40 +33,34 @@ export const httpClient: AxiosInstance = axios.create({
 });
 
 // ------------------------------------------------------------------
+// Interceptor requête : ajoute le header X-Client: web
+// ------------------------------------------------------------------
+httpClient.interceptors.request.use((config) => {
+  config.headers.set('X-Client', 'web');
+  return config;
+});
+
+// ------------------------------------------------------------------
 // Callback global : appelé quand la session est invalide
 // ------------------------------------------------------------------
 type SessionExpiredCallback = () => void;
 let onSessionExpired: SessionExpiredCallback | null = null;
+
 export function setSessionExpiredCallback(cb: SessionExpiredCallback) {
   onSessionExpired = cb;
 }
 
 // ------------------------------------------------------------------
-// Interceptor requête : ajoute l'access token
-// ------------------------------------------------------------------
-httpClient.interceptors.request.use(
-  (config: InternalAxiosRequestConfig) => {
-    const token = accessTokenCookie.get();
-    if (token) {
-      config.headers.set('Authorization', `Bearer ${token}`);
-    }
-    return config;
-  },
-  (error) => Promise.reject(error),
-);
-
-// ------------------------------------------------------------------
 // Interceptor réponse : gère le 401 → refresh → retry
 // ------------------------------------------------------------------
 let isRefreshing = false;
-let pendingRequests: Array<(token: string | null) => void> = [];
+let pendingRequests: Array<(ok: boolean) => void> = [];
 
-function subscribeTokenRefresh(cb: (token: string | null) => void) {
+function subscribe(cb: (ok: boolean) => void) {
   pendingRequests.push(cb);
 }
-
-function onRefreshed(token: string | null) {
-  pendingRequests.forEach((cb) => cb(token));
+function flush(ok: boolean) {
+  pendingRequests.forEach((cb) => cb(ok));
   pendingRequests = [];
 }
 
@@ -82,15 +72,15 @@ const AUTH_ENDPOINTS_TO_SKIP = [
 httpClient.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
-    const originalRequest = error.config as AxiosRequestConfig & {
-      _retry?: boolean;
-    };
+    const originalRequest = error.config as any;
 
+    // Pas de réponse serveur (réseau, timeout, etc.)
     if (!error.response) return Promise.reject(error);
 
-    const url = originalRequest.url ?? '';
+    const url = originalRequest?.url ?? '';
     const isAuthRoute = AUTH_ENDPOINTS_TO_SKIP.some((p) => url.includes(p));
 
+    // 401 sur une route protégée → tentative de refresh
     if (
       error.response.status === 401 &&
       !originalRequest._retry &&
@@ -98,15 +88,11 @@ httpClient.interceptors.response.use(
     ) {
       originalRequest._retry = true;
 
+      // Un refresh est déjà en cours → on met en file d'attente
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
-          subscribeTokenRefresh((newToken) => {
-            if (!newToken) return reject(error);
-            if (originalRequest.headers) {
-              (originalRequest.headers as Record<string, string>)[
-                'Authorization'
-              ] = `Bearer ${newToken}`;
-            }
+          subscribe((ok) => {
+            if (!ok) return reject(error);
             resolve(httpClient(originalRequest));
           });
         });
@@ -115,39 +101,29 @@ httpClient.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        const refreshToken = refreshTokenCookie.get();
-        if (!refreshToken) throw new Error('No refresh token');
-
-        const { data } = await axios.post(
+        // ⚠️ Pas de body : le refreshToken est dans le cookie httpOnly
+        //    limité à Path=/api/auth → il part tout seul.
+        await axios.post(
           `${ENV.API_URL}${AUTH_ENDPOINTS.refresh}`,
-          { refreshToken },
-          { timeout: 20000 },
+          {},
+          {
+            withCredentials: true,
+            headers: { 'X-Client': 'web' },
+            timeout: 20000,
+          },
         );
 
-        const newAccessToken: string = data.accessToken;
-        const newRefreshToken: string = data.refreshToken;
-
-        accessTokenCookie.set(newAccessToken);
-        refreshTokenCookie.set(newRefreshToken);
-
         isRefreshing = false;
-        onRefreshed(newAccessToken);
+        flush(true);
 
-        if (originalRequest.headers) {
-          (originalRequest.headers as Record<string, string>)['Authorization'] =
-            `Bearer ${newAccessToken}`;
-        }
+        // Rejoue la requête originale (les nouveaux cookies sont en place)
         return httpClient(originalRequest);
       } catch (refreshError) {
         isRefreshing = false;
-        onRefreshed(null);
-        authCookies.clearAll();
-        onSessionExpired?.();
+        flush(false);
 
-        // Redirige vers /login si on est côté navigateur
-        if (typeof window !== 'undefined') {
-          window.location.href = '/login';
-        }
+        // Notifie le contexte (qui videra l'UI + redirigera)
+        onSessionExpired?.();
 
         return Promise.reject(refreshError);
       }

@@ -1,6 +1,7 @@
 // contexts/AuthContext.tsx
 'use client';
 
+import { useRouter } from 'next/navigation';
 import React, {
   createContext,
   useCallback,
@@ -10,14 +11,9 @@ import React, {
   useState,
 } from 'react';
 
-import { setSessionExpiredCallback } from '@/services/core/http.service';
 import { authService } from '@/services/auth/auth.service';
-import {
-  accessTokenCookie,
-  authCookies,
-  refreshTokenCookie,
-  userCookie,
-} from '@/services/core/cookies.service';
+import { userCookie } from '@/services/core/cookies.service';
+import { setSessionExpiredCallback } from '@/services/core/http.service';
 import type { AuthUser } from '@/types/auth.types';
 
 interface AuthContextValue {
@@ -32,59 +28,93 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Restauration de session au démarrage (côté client)
+  // ------------------------------------------------------------------
+  // Boot : on tente /auth/me pour valider la session (cookie httpOnly)
+  // ------------------------------------------------------------------
   useEffect(() => {
-    const stored = userCookie.get<AuthUser>();
-    const access = accessTokenCookie.get();
-    const refresh = refreshTokenCookie.get();
+    let cancelled = false;
 
-    if (stored && access && refresh) {
-      setUser(stored);
-    } else {
-      authCookies.clearAll();
-    }
-    setLoading(false);
+    (async () => {
+      // pour éviter un flash de "loading" si l'utilisateur est déjà connecté.
+      const cached = userCookie.get<AuthUser>();
+      if (cached && !cancelled) {
+        setUser(cached);
+      }
+
+      try {
+        // Vérification côté serveur : le cookie httpOnly est-il valide ?
+        const me = await authService.me();
+        if (!cancelled) {
+          setUser(me);
+          // Rafraîchit le cookie user (au cas où il aurait expiré)
+          userCookie.set(me);
+        }
+      } catch {
+        // Session invalide ou expirée : on nettoie
+        if (!cancelled) {
+          userCookie.clear();
+          setUser(null);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  // Callback global : session expirée
+  // ------------------------------------------------------------------
+  // Callback global : session expirée (déclenchée par http.service)
+  // ------------------------------------------------------------------
   useEffect(() => {
     setSessionExpiredCallback(() => {
       setUser(null);
+      userCookie.clear();
+      router.replace('/login');
     });
-  }, []);
+  }, [router]);
 
+  // ------------------------------------------------------------------
+  // Login
+  // ------------------------------------------------------------------
   const login = useCallback(
     async (code: string): Promise<'ok' | 'invalid' | 'forbidden' | 'error'> => {
       try {
         const res = await authService.login(code);
 
-        // 🚫 Seuls les ADMIN peuvent accéder au dashboard
         if (res.user.role !== 'ADMIN') {
           return 'forbidden';
         }
-
-        accessTokenCookie.set(res.accessToken);
-        refreshTokenCookie.set(res.refreshToken);
-        userCookie.set(res.user);
-
         setUser(res.user);
+
         return 'ok';
       } catch (err: any) {
         if (err?.response?.status === 401) return 'invalid';
+        if (err?.response?.status === 403) return 'forbidden';
         return 'error';
       }
     },
     [],
   );
 
+  // ------------------------------------------------------------------
+  // Logout
+  // ------------------------------------------------------------------
   const logout = useCallback(async () => {
-    await authService.logout();
-    authCookies.clearAll();
-    setUser(null);
-  }, []);
+    try {
+      await authService.logout(); // le backend efface les cookies
+    } finally {
+      userCookie.clear();
+      setUser(null);
+      router.replace('/login');
+    }
+  }, [router]);
 
   const value = useMemo<AuthContextValue>(
     () => ({

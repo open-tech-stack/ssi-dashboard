@@ -1,10 +1,16 @@
 // app/page.tsx
-import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
-export default async function Home() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get('ssi.accessToken')?.value;
-
-  redirect(token ? '/dashboard' : '/login');
+/**
+ * Route racine `/`.
+ *
+ * Aiguillage simple : on renvoie toujours vers /login.
+ * Si l'utilisateur est déjà connecté (cookies httpOnly valides),
+ * le proxy Edge le redirigera automatiquement vers /dashboard.
+ *
+ * Avantage : plus de logique de cookie ici, une seule source
+ * de vérité (le proxy).
+ */
+export default function Home() {
+  redirect('/login');
 }
