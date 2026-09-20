@@ -10,12 +10,17 @@
  * ⚠️ Ce proxy gère l'UX (éviter le flash du dashboard).
  *    La sécurité réelle (vérification de la signature JWT) est
  *    déléguée au backend, qui valide chaque requête API.
+ *
+ * ⚠️ IMPORTANT : le matcher ci-dessous EXCLUT explicitement `/api/*`.
+ *    Sans cette exclusion, le proxy intercepterait les appels API
+ *    et les redirigerait vers /login, ce qui casserait le rewrite
+ *    Vercel vers le backend (option B).
  */
 
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { isJwtExpired } from './lib/jwt';
 
+import { isJwtExpired } from './lib/jwt';
 
 const PUBLIC_ROUTES = ['/login'];
 const DEFAULT_AUTH_ROUTE = '/dashboard';
@@ -84,6 +89,9 @@ export function proxy(request: NextRequest) {
 export const config = {
   /**
    * Match toutes les routes SAUF :
+   *  - /api/*         → rewrite Vercel vers le backend NestJS
+   *                     (⚠️ INDISPENSABLE : sans cette exclusion, le proxy
+   *                     intercepte les appels API et les redirige vers /login)
    *  - /_next/static  → assets de build
    *  - /_next/image   → optimisation d'images
    *  - /favicon.ico   → favicon
@@ -92,6 +100,6 @@ export const config = {
    *  - tout fichier avec une extension (images, css, js, fonts, …)
    */
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml|.*\\..*).*)',
+    '/((?!api|_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml|.*\\..*).*)',
   ],
 };
