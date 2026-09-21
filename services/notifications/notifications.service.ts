@@ -33,8 +33,8 @@ export const notificationsService = {
     return data;
   },
 
-  async markRead(id: string): Promise<Notification> {
-    const { data } = await httpClient.patch<Notification>(
+  async markRead(id: string): Promise<{ success: boolean }> {
+    const { data } = await httpClient.patch<{ success: boolean }>(
       NOTIFICATIONS_ENDPOINTS.markRead(id),
     );
     return data;

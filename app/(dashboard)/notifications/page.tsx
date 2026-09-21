@@ -15,6 +15,27 @@ import type {
 
 type ReadFilter = 'all' | 'unread' | 'read';
 
+// ------------------------------------------------------------------
+// Helpers
+// ------------------------------------------------------------------
+function groupLabel(iso: string): string {
+  const d = new Date(iso);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const weekAgo = new Date(today);
+  weekAgo.setDate(weekAgo.getDate() - 7);
+
+  if (d >= today) return "Aujourd'hui";
+  if (d >= yesterday) return 'Hier';
+  if (d >= weekAgo) return 'Cette semaine';
+  return 'Plus ancien';
+}
+
+// ------------------------------------------------------------------
+// Composant
+// ------------------------------------------------------------------
 export default function NotificationsPage() {
   const { colors } = useTheme();
   const { refresh: refreshUnread } = useUnreadCount();
@@ -53,7 +74,7 @@ export default function NotificationsPage() {
     loadAll();
   }, [loadAll]);
 
-  // ---- Marquer une notification lue ----
+  // ---- Actions ----
   const handleMarkRead = useCallback(
     async (id: string) => {
       try {
@@ -69,7 +90,6 @@ export default function NotificationsPage() {
     [refreshUnread],
   );
 
-  // ---- Marquer toutes lues ----
   const handleMarkAllRead = async () => {
     setMarkingAll(true);
     try {
@@ -83,7 +103,6 @@ export default function NotificationsPage() {
     }
   };
 
-  // ---- Supprimer toutes les lues ----
   const handleRemoveAllRead = async () => {
     if (
       !confirm(
@@ -101,32 +120,51 @@ export default function NotificationsPage() {
     }
   };
 
-  // ---- Compteurs ----
+  // ---- Stats ----
   const stats = useMemo(() => {
     const total = notifications.length;
     const unread = notifications.filter((n) => !n.read).length;
     return { total, unread };
   }, [notifications]);
 
+  // ---- Groupement par date ----
+  const grouped = useMemo(() => {
+    const groups = new Map<string, Notification[]>();
+    const order = ["Aujourd'hui", 'Hier', 'Cette semaine', 'Plus ancien'];
+    order.forEach((k) => groups.set(k, []));
+
+    for (const n of notifications) {
+      const key = groupLabel(n.createdAt);
+      groups.get(key)?.push(n);
+    }
+
+    return order
+      .map((key) => ({ key, items: groups.get(key) ?? [] }))
+      .filter((g) => g.items.length > 0);
+  }, [notifications]);
+
   return (
-    <div className="mx-auto flex max-w-4xl flex-col gap-6">
-      {/* Titre + actions */}
+    <div className="mx-auto flex w-full max-w-4xl flex-col gap-6">
+      {/* ═══════════ HEADER ═══════════ */}
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
+        <div className="flex items-baseline gap-3">
           <h1
             className="text-2xl font-black tracking-wide"
             style={{ color: colors.text }}
           >
             Notifications
           </h1>
-          <p
-            className="mt-1 text-sm font-medium"
-            style={{ color: colors.textSecondary }}
-          >
-            {stats.unread > 0
-              ? `${stats.unread} non lue${stats.unread > 1 ? 's' : ''} sur ${stats.total}`
-              : 'Toutes les notifications sont lues.'}
-          </p>
+          {stats.unread > 0 && (
+            <span
+              className="rounded-full px-2 py-0.5 text-xs font-black tracking-wide"
+              style={{
+                backgroundColor: colors.primary + '22',
+                color: colors.primary,
+              }}
+            >
+              {stats.unread} non lue{stats.unread > 1 ? 's' : ''}
+            </span>
+          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -152,7 +190,8 @@ export default function NotificationsPage() {
           <button
             type="button"
             onClick={handleRemoveAllRead}
-            className="flex h-10 items-center gap-2 rounded-lg border px-3 text-xs font-bold transition hover:bg-red-500/10 hover:text-red-500"
+            disabled={notifications.filter((n) => n.read).length === 0}
+            className="flex h-10 items-center gap-2 rounded-lg border px-3 text-xs font-bold transition hover:bg-red-500/10 hover:text-red-500 disabled:opacity-40"
             style={{
               borderColor: colors.border,
               color: colors.textSecondary,
@@ -165,7 +204,7 @@ export default function NotificationsPage() {
         </div>
       </div>
 
-      {/* Filtres */}
+      {/* ═══════════ FILTRES ═══════════ */}
       <div
         className="flex flex-wrap items-center gap-3 rounded-xl border p-3"
         style={{
@@ -173,8 +212,14 @@ export default function NotificationsPage() {
           borderColor: colors.border,
         }}
       >
-        {/* Read filter */}
-        <div className="flex gap-1">
+        {/* Read filter (segmented) */}
+        <div
+          className="flex rounded-lg border p-0.5"
+          style={{
+            backgroundColor: colors.surfaceAlt,
+            borderColor: colors.border,
+          }}
+        >
           {(['all', 'unread', 'read'] as ReadFilter[]).map((r) => {
             const active = readFilter === r;
             const label =
@@ -184,13 +229,11 @@ export default function NotificationsPage() {
                 key={r}
                 type="button"
                 onClick={() => setReadFilter(r)}
-                className="h-8 rounded-md border px-3 text-xs font-bold transition"
+                className="h-7 rounded-md px-3 text-xs font-bold transition"
                 style={{
-                  backgroundColor: active
-                    ? colors.primary + '22'
-                    : 'transparent',
-                  borderColor: active ? colors.primary : colors.border,
-                  color: active ? colors.primary : colors.textSecondary,
+                  backgroundColor: active ? colors.surface : 'transparent',
+                  color: active ? colors.text : colors.textSecondary,
+                  boxShadow: active ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
                 }}
               >
                 {label}
@@ -222,7 +265,7 @@ export default function NotificationsPage() {
         </select>
       </div>
 
-      {/* Erreur */}
+      {/* ═══════════ ERREUR ═══════════ */}
       {error && (
         <div
           className="rounded-lg border p-3 text-sm"
@@ -236,7 +279,7 @@ export default function NotificationsPage() {
         </div>
       )}
 
-      {/* Liste */}
+      {/* ═══════════ LISTE ═══════════ */}
       {loading ? (
         <div
           className="flex flex-col items-center justify-center gap-3 rounded-xl border p-16"
@@ -249,7 +292,10 @@ export default function NotificationsPage() {
             className="h-6 w-6 animate-spin"
             style={{ color: colors.primary }}
           />
-          <p className="text-xs font-semibold" style={{ color: colors.textMuted }}>
+          <p
+            className="text-xs font-semibold"
+            style={{ color: colors.textMuted }}
+          >
             Chargement des notifications…
           </p>
         </div>
@@ -274,13 +320,38 @@ export default function NotificationsPage() {
           </p>
         </div>
       ) : (
-        <div className="flex flex-col gap-2">
-          {notifications.map((n) => (
-            <NotificationItem
-              key={n.id}
-              notification={n}
-              onMarkRead={handleMarkRead}
-            />
+        <div className="flex flex-col gap-6">
+          {grouped.map((group) => (
+            <div key={group.key} className="flex flex-col gap-2">
+              {/* Titre de groupe */}
+              <div className="flex items-center gap-3 px-1">
+                <h2
+                  className="text-[10px] font-black uppercase tracking-widest"
+                  style={{ color: colors.textMuted }}
+                >
+                  {group.key}
+                </h2>
+                <div
+                  className="h-px flex-1"
+                  style={{ backgroundColor: colors.border }}
+                />
+                <span
+                  className="text-[10px] font-bold"
+                  style={{ color: colors.textMuted }}
+                >
+                  {group.items.length}
+                </span>
+              </div>
+
+              {/* Items du groupe */}
+              {group.items.map((n) => (
+                <NotificationItem
+                  key={n.id}
+                  notification={n}
+                  onMarkRead={handleMarkRead}
+                />
+              ))}
+            </div>
           ))}
         </div>
       )}
