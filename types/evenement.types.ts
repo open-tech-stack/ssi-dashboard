@@ -1,6 +1,6 @@
-import { Priority } from "./programme.types";
-
 // types/evenement.types.ts
+import { Priority } from './programme.types';
+
 export type EvenementKind =
   | 'MARIAGE'
   | 'CAMP'
@@ -25,13 +25,20 @@ export type PublicCible =
   | 'VEUVES_ET_ORPHELINS'
   | 'AUTRE';
 
-
 export type EvenementStatus =
   | 'A_VENIR'
   | 'EN_COURS'
   | 'TERMINE'
   | 'ANNULE'
   | 'EXPIRE';
+
+/**
+ * Filtre sur les entités supprimées (soft delete).
+ *  - active  : par défaut, seuls les non-supprimés
+ *  - deleted : uniquement les supprimés (corbeille)
+ *  - all     : tout (actifs + supprimés)
+ */
+export type DeletedFilter = 'active' | 'deleted' | 'all';
 
 // ------------------------------------------------------------------
 // Événement (réponse API)
@@ -76,6 +83,12 @@ export interface Evenement {
 
   createdAt: string;
   updatedAt: string;
+
+  /** Date de soft delete (null si actif) */
+  deletedAt: string | null;
+
+  /** Raccourci UI : true si soft-deleted */
+  isDeleted: boolean;
 }
 
 // ------------------------------------------------------------------
@@ -124,6 +137,8 @@ export interface ListEvenementsParams {
   status?: EvenementStatus;
   q?: string;
   period?: 'upcoming' | 'past' | 'all';
+  /** Filtre sur les supprimés (soft delete) */
+  deleted?: DeletedFilter;
   page?: number;
   pageSize?: number;
 }

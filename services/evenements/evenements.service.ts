@@ -35,7 +35,10 @@ export const evenementsService = {
     return data;
   },
 
-  async update(id: string, payload: UpdateEvenementPayload): Promise<Evenement> {
+  async update(
+    id: string,
+    payload: UpdateEvenementPayload,
+  ): Promise<Evenement> {
     const { data } = await httpClient.patch<Evenement>(
       EVENEMENTS_ENDPOINTS.detail(id),
       payload,
@@ -43,9 +46,32 @@ export const evenementsService = {
     return data;
   },
 
+  /**
+   * Soft delete → l'événement passe en corbeille.
+   */
   async remove(id: string): Promise<{ success: boolean }> {
     const { data } = await httpClient.delete<{ success: boolean }>(
-      EVENEMENTS_ENDPOINTS.detail(id),
+      EVENEMENTS_ENDPOINTS.remove(id),
+    );
+    return data;
+  },
+
+  /**
+   * Restaure un événement précédemment soft-deleted.
+   */
+  async restore(id: string): Promise<Evenement> {
+    const { data } = await httpClient.patch<Evenement>(
+      EVENEMENTS_ENDPOINTS.restore(id),
+    );
+    return data;
+  },
+
+  /**
+   * ⚠️ SUPPRESSION DÉFINITIVE — irréversible.
+   */
+  async hardDelete(id: string): Promise<{ success: boolean }> {
+    const { data } = await httpClient.delete<{ success: boolean }>(
+      EVENEMENTS_ENDPOINTS.hardDelete(id),
     );
     return data;
   },

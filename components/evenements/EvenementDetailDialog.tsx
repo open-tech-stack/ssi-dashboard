@@ -1,7 +1,17 @@
 // components/evenements/EvenementDetailDialog.tsx
 'use client';
 
-import { Calendar, Clock, MapPin, ScrollText, Users, X } from 'lucide-react';
+import {
+  AlertTriangle,
+  Bell,
+  Calendar,
+  Clock,
+  MapPin,
+  ScrollText,
+  User,
+  Users,
+  X,
+} from 'lucide-react';
 
 import { useTheme } from '@/components/providers/ThemeProvider';
 import type { Evenement, PublicCible } from '@/types/evenement.types';
@@ -32,24 +42,45 @@ export default function EvenementDetailDialog({
 
       <div
         className="relative flex h-full max-h-[90vh] w-full max-w-2xl flex-col rounded-2xl border shadow-2xl"
-        style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+        style={{
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
+          animation: 'confirm-in 200ms cubic-bezier(0.16, 1, 0.3, 1)',
+        }}
       >
-        {/* Header */}
+        {/* ═══════════ HEADER ═══════════ */}
         <div
           className="flex shrink-0 items-start justify-between border-b p-5"
           style={{ borderColor: colors.border }}
         >
           <div className="flex-1">
-            <span
-              className="inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-black tracking-widest"
-              style={{
-                backgroundColor: colors.primary + '22',
-                borderColor: colors.primary + '55',
-                color: colors.primary,
-              }}
-            >
-              {EVENEMENT_KIND_LABEL[e.kind].toUpperCase()}
-            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <span
+                className="inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-black tracking-widest"
+                style={{
+                  backgroundColor: colors.primary + '22',
+                  borderColor: colors.primary + '55',
+                  color: colors.primary,
+                }}
+              >
+                {EVENEMENT_KIND_LABEL[e.kind].toUpperCase()}
+              </span>
+
+              {e.notification && (
+                <span
+                  className="inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-black tracking-widest"
+                  style={{
+                    backgroundColor: colors.success + '22',
+                    borderColor: colors.success + '55',
+                    color: colors.success,
+                  }}
+                >
+                  <Bell className="h-2.5 w-2.5" />
+                  NOTIFIÉ
+                </span>
+              )}
+            </div>
+
             <h2
               className="mt-2 text-xl font-black"
               style={{ color: colors.text }}
@@ -60,22 +91,48 @@ export default function EvenementDetailDialog({
               {e.summary}
             </p>
           </div>
+
           <button
             type="button"
             onClick={onClose}
-            className="ml-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border"
+            className="ml-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition hover:opacity-80"
             style={{ borderColor: colors.border, color: colors.text }}
           >
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        {/* Body */}
+        {/* ═══════════ BODY ═══════════ */}
         <div className="flex-1 overflow-y-auto p-5">
           <div className="flex flex-col gap-4">
-            {/* Infos spécifiques */}
+            {/* Banner supprimé */}
+            {e.isDeleted && (
+              <div
+                className="flex items-center gap-2 rounded-lg border p-3"
+                style={{
+                  backgroundColor: colors.danger + '11',
+                  borderColor: colors.danger + '44',
+                  color: colors.danger,
+                }}
+              >
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                <span className="text-xs font-black tracking-widest">
+                  CET ÉVÉNEMENT A ÉTÉ SUPPRIMÉ
+                </span>
+                <span className="ml-auto text-[10px] font-semibold">
+                  {e.deletedAt &&
+                    new Date(e.deletedAt).toLocaleDateString('fr-FR', {
+                      day: '2-digit',
+                      month: 'short',
+                      year: 'numeric',
+                    })}
+                </span>
+              </div>
+            )}
+
+            {/* Infos principales */}
             <div
-              className="flex flex-col gap-2 rounded-lg border p-3"
+              className="flex flex-col gap-3 rounded-lg border p-4"
               style={{
                 backgroundColor: colors.surfaceAlt,
                 borderColor: colors.border,
@@ -85,14 +142,14 @@ export default function EvenementDetailDialog({
               {e.kind === 'MARIAGE' && (
                 <>
                   <MetaRow
-                    icon={<Users className="h-3.5 w-3.5" />}
+                    icon={<Users className="h-4 w-4" />}
                     label="MARIÉS"
                     text={`${e.groomName ?? '—'}  &  ${e.brideName ?? '—'}`}
                     colors={colors}
                   />
                   {e.townHallPlace && (
                     <MetaRow
-                      icon={<MapPin className="h-3.5 w-3.5" />}
+                      icon={<MapPin className="h-4 w-4" />}
                       label="MAIRIE"
                       text={`${e.townHallTime ?? ''} · ${e.townHallPlace}`}
                       colors={colors}
@@ -100,7 +157,7 @@ export default function EvenementDetailDialog({
                   )}
                   {e.ceremonyPlace && (
                     <MetaRow
-                      icon={<MapPin className="h-3.5 w-3.5" />}
+                      icon={<MapPin className="h-4 w-4" />}
                       label="CÉRÉMONIE"
                       text={`${e.ceremonyTime ?? ''} · ${e.ceremonyPlace}`}
                       colors={colors}
@@ -108,7 +165,7 @@ export default function EvenementDetailDialog({
                   )}
                   {e.receptionPlace && (
                     <MetaRow
-                      icon={<MapPin className="h-3.5 w-3.5" />}
+                      icon={<MapPin className="h-4 w-4" />}
                       label="RÉCEPTION"
                       text={e.receptionPlace}
                       colors={colors}
@@ -123,7 +180,7 @@ export default function EvenementDetailDialog({
                 e.kind === 'JOURNEE') &&
                 e.audience && (
                   <MetaRow
-                    icon={<Users className="h-3.5 w-3.5" />}
+                    icon={<Users className="h-4 w-4" />}
                     label="POUR"
                     text={
                       e.audience === 'AUTRE' && e.audienceOther
@@ -137,7 +194,7 @@ export default function EvenementDetailDialog({
               {/* CONFERENCE */}
               {e.kind === 'CONFERENCE' && e.speaker && (
                 <MetaRow
-                  icon={<Users className="h-3.5 w-3.5" />}
+                  icon={<User className="h-4 w-4" />}
                   label="CONFÉRENCIER"
                   text={e.speaker}
                   colors={colors}
@@ -147,17 +204,17 @@ export default function EvenementDetailDialog({
               {/* FORMATION */}
               {e.kind === 'FORMATION' && e.trainer && (
                 <MetaRow
-                  icon={<Users className="h-3.5 w-3.5" />}
+                  icon={<User className="h-4 w-4" />}
                   label="FORMATEUR"
                   text={e.trainer}
                   colors={colors}
                 />
               )}
 
-              {/* Thème (CAMP/SORTIE/CONFERENCE) */}
+              {/* Thème */}
               {e.theme && (
                 <MetaRow
-                  icon={<ScrollText className="h-3.5 w-3.5" />}
+                  icon={<ScrollText className="h-4 w-4" />}
                   label="THÈME"
                   text={e.theme}
                   colors={colors}
@@ -166,7 +223,7 @@ export default function EvenementDetailDialog({
 
               {/* Dates */}
               <MetaRow
-                icon={<Calendar className="h-3.5 w-3.5" />}
+                icon={<Calendar className="h-4 w-4" />}
                 label="DATE"
                 text={fmtDate(e.startsAt)}
                 colors={colors}
@@ -174,7 +231,7 @@ export default function EvenementDetailDialog({
 
               {(e.startsAt || e.endsAt) && (
                 <MetaRow
-                  icon={<Clock className="h-3.5 w-3.5" />}
+                  icon={<Clock className="h-4 w-4" />}
                   label="HEURE"
                   text={`${fmtTime(e.startsAt)} – ${fmtTime(e.endsAt)}`}
                   colors={colors}
@@ -183,7 +240,7 @@ export default function EvenementDetailDialog({
 
               {e.location && (
                 <MetaRow
-                  icon={<MapPin className="h-3.5 w-3.5" />}
+                  icon={<MapPin className="h-4 w-4" />}
                   label="LIEU"
                   text={e.location}
                   colors={colors}
@@ -201,9 +258,10 @@ export default function EvenementDetailDialog({
                 }}
               >
                 <h3
-                  className="mb-2 text-[10px] font-extrabold tracking-widest"
+                  className="mb-2 flex items-center gap-1.5 text-[10px] font-extrabold tracking-widest"
                   style={{ color: colors.primary }}
                 >
+                  <ScrollText className="h-3 w-3" />
                   DÉTAILS
                 </h3>
                 <p
@@ -217,7 +275,7 @@ export default function EvenementDetailDialog({
           </div>
         </div>
 
-        {/* Footer */}
+        {/* ═══════════ FOOTER ═══════════ */}
         <div
           className="flex shrink-0 justify-end border-t p-4"
           style={{ borderColor: colors.border }}
@@ -225,7 +283,7 @@ export default function EvenementDetailDialog({
           <button
             type="button"
             onClick={onClose}
-            className="h-10 rounded-lg border px-4 text-sm font-bold"
+            className="h-10 rounded-lg border px-4 text-sm font-bold transition hover:opacity-90"
             style={{
               borderColor: colors.border,
               color: colors.text,
@@ -255,11 +313,17 @@ function MetaRow({
   colors: any;
 }) {
   return (
-    <div className="flex items-start gap-2">
-      <span className="mt-0.5" style={{ color: colors.textMuted }}>
+    <div className="flex items-start gap-3">
+      <span
+        className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
+        style={{
+          backgroundColor: colors.surface,
+          color: colors.textMuted,
+        }}
+      >
         {icon}
       </span>
-      <div className="flex flex-col">
+      <div className="flex flex-1 flex-col">
         {label && (
           <span
             className="text-[10px] font-extrabold tracking-widest"
@@ -276,10 +340,28 @@ function MetaRow({
   );
 }
 
-const DAYS = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
+const DAYS = [
+  'Dimanche',
+  'Lundi',
+  'Mardi',
+  'Mercredi',
+  'Jeudi',
+  'Vendredi',
+  'Samedi',
+];
 const MONTHS = [
-  'janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin',
-  'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.',
+  'janv.',
+  'févr.',
+  'mars',
+  'avr.',
+  'mai',
+  'juin',
+  'juil.',
+  'août',
+  'sept.',
+  'oct.',
+  'nov.',
+  'déc.',
 ];
 
 function fmtDate(iso: string | null): string {
