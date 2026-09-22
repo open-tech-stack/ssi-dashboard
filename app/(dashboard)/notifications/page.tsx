@@ -1,7 +1,16 @@
 // app/(dashboard)/notifications/page.tsx
 'use client';
 
-import { CheckCheck, Loader2 } from 'lucide-react';
+import {
+  CheckCheck,
+  Loader2,
+  RotateCcw,
+  Skull,
+  Square,
+  Trash2,
+  X,
+  type LucideIcon,
+} from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import NotificationFilters, {
@@ -49,6 +58,7 @@ export default function NotificationsPage() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [bulkLoading, setBulkLoading] = useState(false);
 
   // Filtres
   const [readFilter, setReadFilter] = useState<ReadFilter>('all');
@@ -57,6 +67,9 @@ export default function NotificationsPage() {
     useState<DeletedFilter>('active');
 
   const [markingAll, setMarkingAll] = useState(false);
+
+  // Sélection multiple (côté client)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   // ---- Chargement ----
   const loadAll = useCallback(async () => {
@@ -74,6 +87,7 @@ export default function NotificationsPage() {
 
       const res = await notificationsService.list(params);
       setNotifications(res.items as unknown as Notification[]);
+      setSelectedIds(new Set()); // reset sélection
     } catch {
       setError('Impossible de charger les notifications.');
       toast.error('Impossible de charger les notifications.');
@@ -96,7 +110,50 @@ export default function NotificationsPage() {
     return { active, deleted, total: notifications.length, unread };
   }, [notifications]);
 
-  // ---- Actions ----
+  // ---- Sélection ----
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const clearSelection = useCallback(() => {
+    setSelectedIds(new Set());
+  }, []);
+
+  const selectAll = useCallback(() => {
+    setSelectedIds(new Set(notifications.map((n) => n.id)));
+  }, [notifications]);
+
+  const allSelected =
+    notifications.length > 0 &&
+    notifications.every((n) => selectedIds.has(n.id));
+
+  // ---- Sélection utile pour actions ----
+  const selectedNotifications = useMemo(
+    () => notifications.filter((n) => selectedIds.has(n.id)),
+    [notifications, selectedIds],
+  );
+
+  const hasUnreadSelection = useMemo(
+    () => selectedNotifications.some((n) => !n.read && !n.isDeleted),
+    [selectedNotifications],
+  );
+
+  const hasActiveSelection = useMemo(
+    () => selectedNotifications.some((n) => !n.isDeleted),
+    [selectedNotifications],
+  );
+
+  const hasDeletedSelection = useMemo(
+    () => selectedNotifications.some((n) => n.isDeleted),
+    [selectedNotifications],
+  );
+
+  // ---- Actions individuelles ----
   const handleMarkRead = useCallback(
     async (id: string) => {
       try {
@@ -131,7 +188,7 @@ export default function NotificationsPage() {
     }
   };
 
-  // ---- Soft delete (admin) ----
+  // ---- Actions individuelles destructives ----
   const handleSoftDelete = useCallback(
     async (n: Notification) => {
       const ok = await confirm({
@@ -168,7 +225,6 @@ export default function NotificationsPage() {
     [confirm, toast, loadAll, refreshUnread],
   );
 
-  // ---- Restore (admin) ----
   const handleRestore = useCallback(
     async (n: Notification) => {
       const ok = await confirm({
@@ -193,7 +249,6 @@ export default function NotificationsPage() {
     [confirm, toast, loadAll, refreshUnread],
   );
 
-  // ---- Hard delete (admin) ----
   const handleHardDelete = useCallback(
     async (n: Notification) => {
       const ok = await confirm({
@@ -220,7 +275,189 @@ export default function NotificationsPage() {
     [confirm, toast, loadAll],
   );
 
-  // ---- Groupement par date (exclut les supprimées) ----
+  // ══════════════════════════════════════════════════════════════════
+  // BULK ACTIONS — côté client (appels parallèles au backend existant)
+  // ══════════════════════════════════════════════════════════════════
+
+  /**
+   * Applique une fonction à chaque ID en parallèle.
+   * Renvoie le nombre de succès.
+   */
+  const runInParallel = async (
+    ids: string[],
+    fn: (id: string) => Promise<unknown>,
+  ): Promise<{ success: number; errors: number }> => {
+    const results = await Promise.allSettled(ids.map((id) => fn(id)));
+    const success = results.filter((r) => r.status === 'fulfilled').length;
+    const errors = results.length - success;
+    return { success, errors };
+  };
+
+  // ---- Bulk mark read ----
+  const handleBulkMarkRead = useCallback(async () => {
+    const targets = selectedNotifications
+      .filter((n) => !n.read && !n.isDeleted)
+      .map((n) => n.id);
+
+    if (targets.length === 0) return;
+
+    const ok = await confirm({
+      title: `Marquer ${targets.length} notification${targets.length > 1 ? 's' : ''} comme lue${targets.length > 1 ? 's' : ''} ?`,
+      message: `Ces ${targets.length} notification${targets.length > 1 ? 's' : ''} seront marquées comme lues pour vous.`,
+      variant: 'info',
+      confirmLabel: 'Marquer lues',
+    });
+    if (!ok) return;
+
+    setBulkLoading(true);
+    try {
+      const { success, errors } = await runInParallel(targets, (id) =>
+        notificationsService.markRead(id),
+      );
+
+      setNotifications((prev) =>
+        prev.map((n) =>
+          targets.includes(n.id) ? { ...n, read: true } : n,
+        ),
+      );
+      refreshUnread();
+
+      toast.success(
+        `${success} notification${success > 1 ? 's' : ''} marquée${success > 1 ? 's' : ''} comme lue${success > 1 ? 's' : ''}.${errors > 0 ? ` (${errors} erreur${errors > 1 ? 's' : ''})` : ''}`,
+        { title: 'Action groupée' },
+      );
+      clearSelection();
+    } catch {
+      toast.error('Erreur pendant le marquage groupé.');
+    } finally {
+      setBulkLoading(false);
+    }
+  }, [selectedNotifications, confirm, toast, refreshUnread, clearSelection]);
+
+  // ---- Bulk soft delete ----
+  const handleBulkSoftDelete = useCallback(async () => {
+    const targets = selectedNotifications
+      .filter((n) => !n.isDeleted)
+      .map((n) => n.id);
+
+    if (targets.length === 0) return;
+
+    const ok = await confirm({
+      title: `Mettre ${targets.length} notification${targets.length > 1 ? 's' : ''} à la corbeille ?`,
+      message: `Ces ${targets.length} notification${targets.length > 1 ? 's' : ''} seront masquées POUR TOUS les utilisateurs. Vous pourrez les restaurer plus tard.`,
+      variant: 'warning',
+      confirmLabel: 'Mettre à la corbeille',
+    });
+    if (!ok) return;
+
+    setBulkLoading(true);
+    try {
+      const { success, errors } = await runInParallel(targets, (id) =>
+        notificationsService.remove(id),
+      );
+
+      toast.success(
+        `${success} notification${success > 1 ? 's' : ''} mise${success > 1 ? 's' : ''} à la corbeille.${errors > 0 ? ` (${errors} erreur${errors > 1 ? 's' : ''})` : ''}`,
+        { title: 'Action groupée' },
+      );
+      clearSelection();
+      loadAll();
+      refreshUnread();
+    } catch {
+      toast.error('Erreur pendant la mise à la corbeille groupée.');
+    } finally {
+      setBulkLoading(false);
+    }
+  }, [
+    selectedNotifications,
+    confirm,
+    toast,
+    loadAll,
+    refreshUnread,
+    clearSelection,
+  ]);
+
+  // ---- Bulk restore ----
+  const handleBulkRestore = useCallback(async () => {
+    const targets = selectedNotifications
+      .filter((n) => n.isDeleted)
+      .map((n) => n.id);
+
+    if (targets.length === 0) return;
+
+    const ok = await confirm({
+      title: `Restaurer ${targets.length} notification${targets.length > 1 ? 's' : ''} ?`,
+      message: `Ces ${targets.length} notification${targets.length > 1 ? 's' : ''} redeviendront visibles pour tous les utilisateurs.`,
+      variant: 'info',
+      confirmLabel: 'Restaurer',
+    });
+    if (!ok) return;
+
+    setBulkLoading(true);
+    try {
+      const { success, errors } = await runInParallel(targets, (id) =>
+        notificationsService.restore(id),
+      );
+
+      toast.success(
+        `${success} notification${success > 1 ? 's' : ''} restaurée${success > 1 ? 's' : ''}.${errors > 0 ? ` (${errors} erreur${errors > 1 ? 's' : ''})` : ''}`,
+        { title: 'Action groupée' },
+      );
+      clearSelection();
+      loadAll();
+      refreshUnread();
+    } catch {
+      toast.error('Erreur pendant la restauration groupée.');
+    } finally {
+      setBulkLoading(false);
+    }
+  }, [
+    selectedNotifications,
+    confirm,
+    toast,
+    loadAll,
+    refreshUnread,
+    clearSelection,
+  ]);
+
+  // ---- Bulk hard delete ----
+  const handleBulkHardDelete = useCallback(async () => {
+    const targets = selectedNotifications
+      .filter((n) => n.isDeleted)
+      .map((n) => n.id);
+
+    if (targets.length === 0) return;
+
+    const ok = await confirm({
+      title: `⚠️ SUPPRIMER ${targets.length} NOTIFICATION${targets.length > 1 ? 'S' : ''} DÉFINITIVEMENT`,
+      message: `Ces ${targets.length} notification${targets.length > 1 ? 's' : ''} seront définitivement supprimées. Cette action est IRRÉVERSIBLE.`,
+      variant: 'danger',
+      confirmLabel: 'Supprimer définitivement',
+      requireInput: true,
+      confirmWord: 'SUPPRIMER',
+    });
+    if (!ok) return;
+
+    setBulkLoading(true);
+    try {
+      const { success, errors } = await runInParallel(targets, (id) =>
+        notificationsService.hardDelete(id),
+      );
+
+      toast.success(
+        `${success} notification${success > 1 ? 's' : ''} supprimée${success > 1 ? 's' : ''} définitivement.${errors > 0 ? ` (${errors} erreur${errors > 1 ? 's' : ''})` : ''}`,
+        { title: 'Action groupée', duration: 5000 },
+      );
+      clearSelection();
+      loadAll();
+    } catch {
+      toast.error('Erreur pendant la suppression groupée.');
+    } finally {
+      setBulkLoading(false);
+    }
+  }, [selectedNotifications, confirm, toast, loadAll, clearSelection]);
+
+  // ---- Groupement par date ----
   const grouped = useMemo(() => {
     const groups = new Map<string, Notification[]>();
     const order = ["Aujourd'hui", 'Hier', 'Cette semaine', 'Plus ancien'];
@@ -297,6 +534,113 @@ export default function NotificationsPage() {
         }}
         showDeletedFilter
       />
+
+      {/* ═══════════ BARRE DE SÉLECTION ═══════════ */}
+      {notifications.length > 0 && !loading && (
+        <div
+          className="flex flex-wrap items-center gap-3 rounded-xl border p-3"
+          style={{
+            backgroundColor: colors.surface,
+            borderColor:
+              selectedIds.size > 0 ? colors.primary + '55' : colors.border,
+          }}
+        >
+          {/* Select all */}
+          <button
+            type="button"
+            onClick={allSelected ? clearSelection : selectAll}
+            className="flex h-8 items-center gap-2 rounded-md border px-3 text-xs font-bold transition hover:opacity-90"
+            style={{
+              borderColor: colors.border,
+              color: colors.text,
+              backgroundColor: colors.surfaceAlt,
+            }}
+          >
+            {allSelected ? (
+              <CheckCheck className="h-3.5 w-3.5" />
+            ) : (
+              <Square className="h-3.5 w-3.5" />
+            )}
+            {allSelected ? 'Tout désélectionner' : 'Tout sélectionner'}
+          </button>
+
+          {selectedIds.size > 0 && (
+            <>
+              <span
+                className="text-xs font-black"
+                style={{ color: colors.primary }}
+              >
+                {selectedIds.size} sélectionnée{selectedIds.size > 1 ? 's' : ''}
+              </span>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Mark read */}
+                {hasUnreadSelection && (
+                  <BulkBtn
+                    icon={CheckCheck}
+                    label="Marquer lues"
+                    tone={colors.primary}
+                    disabled={bulkLoading}
+                    onClick={handleBulkMarkRead}
+                  />
+                )}
+
+                {/* Trash */}
+                {hasActiveSelection && (
+                  <BulkBtn
+                    icon={Trash2}
+                    label="Corbeille"
+                    tone={colors.warning}
+                    disabled={bulkLoading}
+                    onClick={handleBulkSoftDelete}
+                  />
+                )}
+
+                {/* Restore */}
+                {hasDeletedSelection && (
+                  <BulkBtn
+                    icon={RotateCcw}
+                    label="Restaurer"
+                    tone={colors.success}
+                    disabled={bulkLoading}
+                    onClick={handleBulkRestore}
+                  />
+                )}
+
+                {/* Hard delete */}
+                {hasDeletedSelection && (
+                  <BulkBtn
+                    icon={Skull}
+                    label="Suppr. définitif"
+                    tone={colors.danger}
+                    disabled={bulkLoading}
+                    onClick={handleBulkHardDelete}
+                  />
+                )}
+
+                {bulkLoading && (
+                  <Loader2
+                    className="h-4 w-4 animate-spin"
+                    style={{ color: colors.primary }}
+                  />
+                )}
+
+                {/* Clear */}
+                <button
+                  type="button"
+                  onClick={clearSelection}
+                  disabled={bulkLoading}
+                  className="flex h-8 w-8 items-center justify-center rounded-md transition hover:opacity-80 disabled:opacity-40"
+                  style={{ color: colors.textMuted }}
+                  aria-label="Désélectionner tout"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {/* ═══════════ ERREUR ═══════════ */}
       {error && (
@@ -375,7 +719,7 @@ export default function NotificationsPage() {
                 </span>
               </div>
 
-              {/* Items du groupe */}
+              {/* Items */}
               {group.items.map((n) => (
                 <NotificationItem
                   key={n.id}
@@ -385,6 +729,9 @@ export default function NotificationsPage() {
                   onRestore={handleRestore}
                   onHardDelete={handleHardDelete}
                   isAdmin
+                  selectable
+                  selected={selectedIds.has(n.id)}
+                  onToggleSelect={toggleSelect}
                 />
               ))}
             </div>
@@ -392,5 +739,39 @@ export default function NotificationsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+// ------------------------------------------------------------------
+// Bulk button
+// ------------------------------------------------------------------
+function BulkBtn({
+  icon: Icon,
+  label,
+  tone,
+  disabled,
+  onClick,
+}: {
+  icon: LucideIcon;
+  label: string;
+  tone: string;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="flex h-8 items-center gap-1.5 rounded-md border px-3 text-xs font-bold transition hover:opacity-90 disabled:opacity-40"
+      style={{
+        backgroundColor: tone + '15',
+        borderColor: tone + '44',
+        color: tone,
+      }}
+    >
+      <Icon className="h-3.5 w-3.5" />
+      {label}
+    </button>
   );
 }

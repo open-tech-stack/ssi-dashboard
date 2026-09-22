@@ -26,16 +26,16 @@ import { cn } from '@/lib/utils';
 
 interface Props {
   notification: Notification;
-  /** Marquer comme lue (au clic ou via le bouton dédié) */
   onMarkRead?: (id: string) => void;
-  /** Soft delete (admin) */
   onSoftDelete?: (n: Notification) => void;
-  /** Restore (admin) */
   onRestore?: (n: Notification) => void;
-  /** Hard delete (admin) */
   onHardDelete?: (n: Notification) => void;
-  /** Mode admin : affiche les actions destructives */
   isAdmin?: boolean;
+
+  // ⬇️ NOUVEAU — sélection multiple
+  selectable?: boolean;
+  selected?: boolean;
+  onToggleSelect?: (id: string) => void;
 }
 
 // ------------------------------------------------------------------
@@ -81,7 +81,7 @@ function toneOf(
 }
 
 // ------------------------------------------------------------------
-// Résolution deep link mobile → dashboard web
+// Deep link mobile → dashboard web
 // ------------------------------------------------------------------
 function resolveDashboardRoute(linkTo: string): string | null {
   const segment = linkTo.split('/').filter(Boolean)[0];
@@ -105,18 +105,8 @@ function resolveDashboardRoute(linkTo: string): string | null {
 // Date relative
 // ------------------------------------------------------------------
 const MONTHS_SHORT = [
-  'janv.',
-  'févr.',
-  'mars',
-  'avr.',
-  'mai',
-  'juin',
-  'juil.',
-  'août',
-  'sept.',
-  'oct.',
-  'nov.',
-  'déc.',
+  'janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin',
+  'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.',
 ];
 
 function relativeDate(iso: string): string {
@@ -145,6 +135,9 @@ export default function NotificationItem({
   onRestore,
   onHardDelete,
   isAdmin = false,
+  selectable = false,
+  selected = false,
+  onToggleSelect,
 }: Props) {
   const { colors } = useTheme();
   const router = useRouter();
@@ -157,7 +150,6 @@ export default function NotificationItem({
   const isDeleted = notification.isDeleted;
 
   const handleClick = () => {
-    // Ne pas naviguer ni marquer comme lu si supprimée
     if (isDeleted) return;
 
     if (isUnread && onMarkRead) {
@@ -169,6 +161,9 @@ export default function NotificationItem({
     }
   };
 
+  // Actions visibles : toujours pour non-lues/supprimées, au hover sinon
+  const showActions = isAdmin && (isUnread || isDeleted || hovered);
+
   return (
     <div
       onClick={handleClick}
@@ -177,19 +172,23 @@ export default function NotificationItem({
       className={cn(
         'group relative flex items-start gap-3 overflow-hidden rounded-xl border p-4 pl-5 transition',
         !isDeleted && 'cursor-pointer hover:translate-x-0.5',
-        isDeleted && 'opacity-60',
+        isDeleted && 'opacity-70',
       )}
       style={{
-        backgroundColor: isDeleted
-          ? colors.surface
-          : isUnread
-            ? colors.primary + '06'
-            : colors.surface,
-        borderColor: isDeleted
-          ? colors.danger + '33'
-          : isUnread
-            ? colors.primary + '33'
-            : colors.border,
+        backgroundColor: selected
+          ? colors.primary + '11'
+          : isDeleted
+            ? colors.danger + '06'
+            : isUnread
+              ? colors.primary + '06'
+              : colors.surface,
+        borderColor: selected
+          ? colors.primary
+          : isDeleted
+            ? colors.danger + '44'
+            : isUnread
+              ? colors.primary + '33'
+              : colors.border,
       }}
     >
       {/* Barre latérale colorée */}
@@ -204,6 +203,31 @@ export default function NotificationItem({
               : 'transparent',
         }}
       />
+
+      {/* ═════ Checkbox de sélection ═════ */}
+      {selectable && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleSelect?.(notification.id);
+          }}
+          className="mt-3 flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 transition"
+          style={{
+            borderColor: selected ? colors.primary : colors.border,
+            backgroundColor: selected ? colors.primary : 'transparent',
+          }}
+          aria-label={selected ? 'Désélectionner' : 'Sélectionner'}
+        >
+          {selected && (
+            <Check
+              className="h-3 w-3"
+              style={{ color: colors.onPrimary }}
+              strokeWidth={3}
+            />
+          )}
+        </button>
+      )}
 
       {/* Icône */}
       <div
@@ -274,16 +298,14 @@ export default function NotificationItem({
           {notification.message}
         </p>
 
-        {/* Actions (au survol, admin seulement) */}
-        {isAdmin && hovered && (
+        {/* Actions */}
+        {showActions && (
           <div className="mt-1 flex flex-wrap items-center gap-1">
-            {/* Marquer lu (uniquement si non lue et non supprimée) */}
             {isUnread && !isDeleted && onMarkRead && (
               <ActionBtn
                 icon={Check}
                 label="Marquer lu"
                 tone={colors.primary}
-                colors={colors}
                 onClick={(e) => {
                   e.stopPropagation();
                   onMarkRead(notification.id);
@@ -291,13 +313,11 @@ export default function NotificationItem({
               />
             )}
 
-            {/* Soft delete (uniquement si active) */}
             {!isDeleted && onSoftDelete && (
               <ActionBtn
                 icon={Trash2}
                 label="Supprimer"
                 tone={colors.warning}
-                colors={colors}
                 onClick={(e) => {
                   e.stopPropagation();
                   onSoftDelete(notification);
@@ -305,13 +325,11 @@ export default function NotificationItem({
               />
             )}
 
-            {/* Restore (uniquement si supprimée) */}
             {isDeleted && onRestore && (
               <ActionBtn
                 icon={RotateCcw}
                 label="Restaurer"
                 tone={colors.success}
-                colors={colors}
                 onClick={(e) => {
                   e.stopPropagation();
                   onRestore(notification);
@@ -319,13 +337,11 @@ export default function NotificationItem({
               />
             )}
 
-            {/* Hard delete (uniquement si supprimée) */}
             {isDeleted && onHardDelete && (
               <ActionBtn
                 icon={Skull}
                 label="Supprimer définitivement"
                 tone={colors.danger}
-                colors={colors}
                 onClick={(e) => {
                   e.stopPropagation();
                   onHardDelete(notification);
@@ -340,19 +356,17 @@ export default function NotificationItem({
 }
 
 // ------------------------------------------------------------------
-// Petit bouton d'action compact
+// Bouton d'action compact
 // ------------------------------------------------------------------
 function ActionBtn({
   icon: Icon,
   label,
   tone,
-  colors,
   onClick,
 }: {
   icon: LucideIcon;
   label: string;
   tone: string;
-  colors: any;
   onClick: (e: React.MouseEvent) => void;
 }) {
   const [hover, setHover] = useState(false);
