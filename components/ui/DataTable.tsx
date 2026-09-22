@@ -72,7 +72,7 @@ export default function DataTable<T = any>({
         emptyMessage = 'Aucune donnée',
         rowKey,
         searchPlaceholder = 'Rechercher…',
-        rowClassName, 
+        rowClassName,
     } = config;
 
     // ---- État ----
@@ -505,11 +505,13 @@ export default function DataTable<T = any>({
                                         key={id}
                                         className={cn(
                                             'border-b transition',
-                                            rowClassName?.(row), 
+                                            rowClassName?.(row),
                                         )}
                                         style={{
                                             borderColor: colors.border,
-                                            backgroundColor: isSelected ? colors.primary + '11' : undefined,
+                                            backgroundColor: isSelected
+                                                ? colors.primary + '11'
+                                                : undefined,
                                         }}
                                         onMouseEnter={(e) => {
                                             if (!isSelected)
@@ -517,9 +519,97 @@ export default function DataTable<T = any>({
                                                     colors.surfaceAlt;
                                         }}
                                         onMouseLeave={(e) => {
-                                            if (!isSelected) (e.currentTarget as HTMLElement).style.backgroundColor = '';
+                                            if (!isSelected)
+                                                (e.currentTarget as HTMLElement).style.backgroundColor = '';
                                         }}
-                                    ></tr>
+                                    >
+                                        {/* ⬇️ Case à cocher */}
+                                        {selectable && (
+                                            <td className="p-3">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => toggleSelectRow(row, globalIndex)}
+                                                    className="flex h-4 w-4 items-center justify-center rounded border transition"
+                                                    style={{
+                                                        borderColor: isSelected
+                                                            ? colors.primary
+                                                            : colors.border,
+                                                        backgroundColor: isSelected
+                                                            ? colors.primary
+                                                            : 'transparent',
+                                                    }}
+                                                >
+                                                    {isSelected && (
+                                                        <Check
+                                                            className="h-3 w-3"
+                                                            style={{ color: colors.onPrimary }}
+                                                        />
+                                                    )}
+                                                </button>
+                                            </td>
+                                        )}
+
+                                        {/* ⬇️ Colonnes */}
+                                        {visibleColumns.map((col) => (
+                                            <td
+                                                key={col.key}
+                                                className={cn(
+                                                    'p-3 text-sm',
+                                                    col.align === 'center' && 'text-center',
+                                                    col.align === 'right' && 'text-right',
+                                                    col.className,
+                                                )}
+                                                style={{ color: colors.text }}
+                                            >
+                                                {col.render
+                                                    ? col.render(
+                                                        (row as any)[col.key],
+                                                        row,
+                                                        globalIndex,
+                                                    )
+                                                    : ((row as any)[col.key] ?? '—')}
+                                            </td>
+                                        ))}
+
+                                        {/* ⬇️ Actions contextuelles */}
+                                        {actions.length > 0 && (
+                                            <td className="p-3">
+                                                <div className="flex items-center justify-end gap-1">
+                                                    {actions.map((action, i) => {
+                                                        // ⚠️ Filtre les actions cachées (nouveau)
+                                                        if (action.hidden?.(row)) return null;
+                                                        // Compat : ancien `condition`
+                                                        if (
+                                                            action.condition &&
+                                                            !action.condition(row)
+                                                        )
+                                                            return null;
+
+                                                        const Icon = action.icon;
+                                                        return (
+                                                            <button
+                                                                key={i}
+                                                                type="button"
+                                                                onClick={() => action.onClick(row)}
+                                                                title={action.label}
+                                                                className={cn(
+                                                                    'flex h-8 w-8 items-center justify-center rounded-lg transition',
+                                                                    action.className,
+                                                                )}
+                                                                style={{
+                                                                    color: action.className
+                                                                        ? undefined
+                                                                        : colors.textSecondary,
+                                                                }}
+                                                            >
+                                                                <Icon className="h-4 w-4" />
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </td>
+                                        )}
+                                    </tr>
                                 );
                             })}
                     </tbody>
