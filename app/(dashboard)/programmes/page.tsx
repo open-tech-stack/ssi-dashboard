@@ -23,12 +23,8 @@ import { peopleService } from '@/services/people/people.service';
 import { programmesService } from '@/services/programmes/programmes.service';
 import type { Group } from '@/types/group.types';
 import type { Person } from '@/types/person.types';
-import type {
-  DeletedFilter,
-  Programme,
-  ProgrammeKind,
-} from '@/types/programme.types';
-import type { Column, RowAction } from '@/types/table.types';
+import { Programme, ProgrammeKind, DeletedFilter, Column, RowAction } from '@/types';
+
 
 export default function ProgrammesPage() {
   const { colors } = useTheme();
