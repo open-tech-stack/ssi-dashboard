@@ -1,7 +1,17 @@
 // components/programmes/SectionEditor.tsx
 'use client';
 
-import { GripVertical, Plus, Trash2, X } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronUp,
+  GripVertical,
+  Trash2,
+  Type,
+  User,
+  Users,
+  X,
+} from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 import { useTheme } from '@/components/providers/ThemeProvider';
 import type { Group } from '@/types/group.types';
@@ -26,7 +36,6 @@ interface Props {
   canMoveDown: boolean;
 }
 
-// Clés disponibles selon le type de programme
 const SECTION_KEYS_ALL: ProgrammeSectionKey[] = [
   'ACCUEIL',
   'ANIMATION',
@@ -36,6 +45,21 @@ const SECTION_KEYS_ALL: ProgrammeSectionKey[] = [
   'PARKING',
   'LIBRE',
 ];
+
+const MODES: { key: SectionMode; label: string; icon: typeof User }[] = [
+  { key: 'persons', label: 'Personnes', icon: User },
+  { key: 'group', label: 'Groupe', icon: Users },
+  { key: 'value', label: 'Texte', icon: Type },
+];
+
+/**
+ * Déduit le mode initial depuis les données d'une section.
+ */
+function detectMode(section: ProgrammeSectionPayload): SectionMode {
+  if (section.groupId) return 'group';
+  if (section.value && !section.personIds?.length) return 'value';
+  return 'persons';
+}
 
 export default function SectionEditor({
   section,
@@ -50,15 +74,15 @@ export default function SectionEditor({
 }: Props) {
   const { colors } = useTheme();
 
-  // Détecte le mode depuis la section
-  const mode: SectionMode =
-    section.groupId && !section.personIds?.length
-      ? 'group'
-      : section.value && !section.personIds?.length && !section.groupId
-      ? 'value'
-      : 'persons';
+  const [mode, setMode] = useState<SectionMode>(() => detectMode(section));
+
+  // Resync seulement si la clé change (pas à chaque render)
+  useEffect(() => {
+    setMode(detectMode(section));
+  }, [section.key]); // ⬅️ plus précis que [index]
 
   const handleModeChange = (next: SectionMode) => {
+    setMode(next);
     if (next === 'persons') {
       onChange({ ...section, groupId: null, value: null });
     } else if (next === 'group') {
@@ -76,15 +100,23 @@ export default function SectionEditor({
     onChange({ ...section, personIds: next });
   };
 
+  // Indicateur du mode actif (pastille colorée à droite)
+  const modeIndicator =
+    mode === 'group' && section.groupId
+      ? { label: groups.find((g) => g.id === section.groupId)?.name ?? 'Groupe', color: colors.info }
+      : mode === 'value' && section.value
+        ? { label: section.value, color: colors.warning }
+        : null;
+
   return (
     <div
-      className="flex flex-col gap-3 rounded-xl border p-3"
+      className="flex flex-col gap-3 rounded-xl border p-3 transition"
       style={{
         backgroundColor: colors.surfaceAlt,
-        borderColor: colors.border,
+        borderColor: mode === 'persons' ? colors.border : colors.primary + '33',
       }}
     >
-      {/* Header section */}
+      {/* ═══════════ HEADER ═══════════ */}
       <div className="flex items-center gap-2">
         {/* Grip + flèches */}
         <div className="flex flex-col gap-0.5">
@@ -92,33 +124,34 @@ export default function SectionEditor({
             type="button"
             disabled={!canMoveUp}
             onClick={() => onMove(-1)}
-            className="text-[9px] leading-none disabled:opacity-30"
+            className="flex h-4 w-5 items-center justify-center rounded transition hover:bg-white/10 disabled:opacity-20"
             style={{ color: colors.textMuted }}
             title="Monter"
           >
-            ▲
+            <ChevronUp className="h-3 w-3" />
           </button>
           <GripVertical
-            className="h-3 w-3"
+            className="mx-auto h-3 w-3"
             style={{ color: colors.textMuted }}
           />
           <button
             type="button"
             disabled={!canMoveDown}
             onClick={() => onMove(1)}
-            className="text-[9px] leading-none disabled:opacity-30"
+            className="flex h-4 w-5 items-center justify-center rounded transition hover:bg-white/10 disabled:opacity-20"
             style={{ color: colors.textMuted }}
             title="Descendre"
           >
-            ▼
+            <ChevronDown className="h-3 w-3" />
           </button>
         </div>
 
+        {/* Numéro de section */}
         <span
-          className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-[10px] font-black"
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[11px] font-black"
           style={{
-            backgroundColor: colors.primary + '22',
-            color: colors.primary,
+            backgroundColor: colors.primary,
+            color: colors.onPrimary,
           }}
         >
           {index + 1}
@@ -156,7 +189,7 @@ export default function SectionEditor({
           <input
             value={section.label}
             onChange={(e) => onChange({ ...section, label: e.target.value })}
-            placeholder="Libellé personnalisé"
+            placeholder="Libellé"
             className="h-8 flex-1 rounded-md border px-2 text-xs outline-none"
             style={{
               backgroundColor: colors.surface,
@@ -166,6 +199,7 @@ export default function SectionEditor({
           />
         )}
 
+        {/* Trash */}
         <button
           type="button"
           onClick={onRemove}
@@ -177,31 +211,34 @@ export default function SectionEditor({
         </button>
       </div>
 
-      {/* Mode selector */}
-      <div className="flex gap-1">
-        {(['persons', 'group', 'value'] as SectionMode[]).map((m) => {
-          const active = mode === m;
-          const label =
-            m === 'persons' ? 'Personnes' : m === 'group' ? 'Groupe' : 'Texte';
+      {/* ═══════════ MODE SELECTOR ═══════════ */}
+      <div
+        className="flex gap-1 rounded-lg p-1"
+        style={{ backgroundColor: colors.surface }}
+      >
+        {MODES.map((m) => {
+          const active = mode === m.key;
+          const Icon = m.icon;
           return (
             <button
-              key={m}
+              key={m.key}
               type="button"
-              onClick={() => handleModeChange(m)}
-              className="flex-1 rounded-md border px-2 py-1 text-[10px] font-bold transition"
+              onClick={() => handleModeChange(m.key)}
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-md border px-2 py-1.5 text-[10px] font-bold transition"
               style={{
                 backgroundColor: active ? colors.primary + '22' : 'transparent',
-                borderColor: active ? colors.primary : colors.border,
+                borderColor: active ? colors.primary : 'transparent',
                 color: active ? colors.primary : colors.textSecondary,
               }}
             >
-              {label}
+              <Icon className="h-3 w-3" />
+              {m.label}
             </button>
           );
         })}
       </div>
 
-      {/* Contenu selon mode */}
+      {/* ═══════════ CONTENU SELON MODE ═══════════ */}
       {mode === 'persons' && (
         <PersonMultiSelect
           people={people}
@@ -244,6 +281,21 @@ export default function SectionEditor({
             color: colors.text,
           }}
         />
+      )}
+
+      {/* Indicateur discret du contenu choisi */}
+      {modeIndicator && (
+        <div
+          className="flex items-center gap-1.5 rounded-md border px-2 py-1 text-[10px] font-semibold"
+          style={{
+            backgroundColor: modeIndicator.color + '11',
+            borderColor: modeIndicator.color + '33',
+            color: modeIndicator.color,
+          }}
+        >
+          <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: modeIndicator.color }} />
+          {modeIndicator.label}
+        </div>
       )}
     </div>
   );

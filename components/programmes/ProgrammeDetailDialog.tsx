@@ -40,16 +40,31 @@ export default function ProgrammeDetailDialog({
           style={{ borderColor: colors.border }}
         >
           <div className="flex-1">
-            <span
-              className="inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-black tracking-widest"
-              style={{
-                backgroundColor: colors.primary + '22',
-                borderColor: colors.primary + '55',
-                color: colors.primary,
-              }}
-            >
-              {PROGRAMME_KIND_LABEL[programme.kind].toUpperCase()}
-            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <span
+                className="inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-black tracking-widest"
+                style={{
+                  backgroundColor: colors.primary + '22',
+                  borderColor: colors.primary + '55',
+                  color: colors.primary,
+                }}
+              >
+                {PROGRAMME_KIND_LABEL[programme.kind].toUpperCase()}
+              </span>
+
+              {programme.notification && (
+                <span
+                  className="inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-black tracking-widest"
+                  style={{
+                    backgroundColor: colors.success + '22',
+                    borderColor: colors.success + '55',
+                    color: colors.success,
+                  }}
+                >
+                  🔔 NOTIFIÉ
+                </span>
+              )}
+            </div>
             <h2
               className="mt-2 text-xl font-black"
               style={{ color: colors.text }}
@@ -76,6 +91,29 @@ export default function ProgrammeDetailDialog({
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-5">
           <div className="flex flex-col gap-4">
+            {/* Banner : supprimé */}
+            {programme.isDeleted && (
+              <div
+                className="flex items-center gap-2 rounded-lg border p-3"
+                style={{
+                  backgroundColor: colors.danger + '11',
+                  borderColor: colors.danger + '44',
+                  color: colors.danger,
+                }}
+              >
+                <span className="text-xs font-black tracking-widest">
+                  ⚠️ CE PROGRAMME A ÉTÉ SUPPRIMÉ
+                </span>
+                <span className="ml-auto text-[10px] font-semibold">
+                  {programme.deletedAt &&
+                    new Date(programme.deletedAt).toLocaleDateString('fr-FR', {
+                      day: '2-digit',
+                      month: 'short',
+                      year: 'numeric',
+                    })}
+                </span>
+              </div>
+            )}
             {/* Meta */}
             <div
               className="flex flex-col gap-2 rounded-lg border p-3"

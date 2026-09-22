@@ -2,7 +2,7 @@
 'use client';
 
 import { Loader2, Plus, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import SectionEditor from '@/components/programmes/SectionEditor';
 import { useTheme } from '@/components/providers/ThemeProvider';
@@ -60,13 +60,14 @@ export default function ProgrammeFormDialog({
   const [hasHolyCommunion, setHasHolyCommunion] = useState(false);
   const [holyCommunionMessage, setHolyCommunionMessage] = useState('');
   const [notes, setNotes] = useState('');
-  const [notification, setNotification] = useState(false); // 🔔 AJOUT
+  const [notification, setNotification] = useState(false);
   const [sections, setSections] = useState<ProgrammeSectionPayload[]>([
     { ...DEFAULT_SECTION },
   ]);
 
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const sectionsEndRef = useRef<HTMLDivElement>(null);
 
   // ---- Reset à l'ouverture ----
   useEffect(() => {
@@ -132,6 +133,12 @@ export default function ProgrammeFormDialog({
         value: null,
       },
     ]);
+    setTimeout(() => {
+      sectionsEndRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      });
+    }, 100);
   };
 
   const updateSection = (index: number, next: ProgrammeSectionPayload) => {
@@ -517,7 +524,7 @@ export default function ProgrammeFormDialog({
 
                 {sections.map((section, i) => (
                   <SectionEditor
-                    key={i}
+                    key={`section-${i}-${section.key}`}
                     section={section}
                     index={i}
                     people={people}
@@ -529,6 +536,23 @@ export default function ProgrammeFormDialog({
                     canMoveDown={i < sections.length - 1}
                   />
                 ))}
+
+                <button
+                  type="button"
+                  onClick={addSection}
+                  className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed text-xs font-bold transition hover:opacity-90"
+                  style={{
+                    borderColor: colors.primary + '55',
+                    color: colors.primary,
+                    backgroundColor: colors.primary + '08',
+                  }}
+                >
+                  <Plus className="h-4 w-4" />
+                  Ajouter une section
+                </button>
+
+                <div ref={sectionsEndRef} className="h-1" />
+
               </div>
 
               {/* Erreur */}

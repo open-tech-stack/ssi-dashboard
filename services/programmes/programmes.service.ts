@@ -35,7 +35,10 @@ export const programmesService = {
     return data;
   },
 
-  async update(id: string, payload: UpdateProgrammePayload): Promise<Programme> {
+  async update(
+    id: string,
+    payload: UpdateProgrammePayload,
+  ): Promise<Programme> {
     const { data } = await httpClient.patch<Programme>(
       PROGRAMMES_ENDPOINTS.detail(id),
       payload,
@@ -43,9 +46,34 @@ export const programmesService = {
     return data;
   },
 
+  /**
+   * Soft delete → le programme passe en corbeille.
+   * Il pourra être restauré via `restore(id)`.
+   */
   async remove(id: string): Promise<{ success: boolean }> {
     const { data } = await httpClient.delete<{ success: boolean }>(
-      PROGRAMMES_ENDPOINTS.detail(id),
+      PROGRAMMES_ENDPOINTS.remove(id),
+    );
+    return data;
+  },
+
+  /**
+   * Restaure un programme précédemment soft-deleted.
+   */
+  async restore(id: string): Promise<Programme> {
+    const { data } = await httpClient.patch<Programme>(
+      PROGRAMMES_ENDPOINTS.restore(id),
+    );
+    return data;
+  },
+
+  /**
+   * ⚠️ SUPPRESSION DÉFINITIVE — irréversible.
+   * Supprime le programme et toutes ses sections en base.
+   */
+  async hardDelete(id: string): Promise<{ success: boolean }> {
+    const { data } = await httpClient.delete<{ success: boolean }>(
+      PROGRAMMES_ENDPOINTS.hardDelete(id),
     );
     return data;
   },

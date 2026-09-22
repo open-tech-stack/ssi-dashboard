@@ -19,6 +19,14 @@ export type ProgrammeStatus =
   | 'ANNULE'
   | 'EXPIRE';
 
+/**
+ * Filtre sur les entités supprimées (soft delete).
+ *  - active  : par défaut, seuls les non-supprimés
+ *  - deleted : uniquement les supprimés (corbeille)
+ *  - all     : tout (actifs + supprimés)
+ */
+export type DeletedFilter = 'active' | 'deleted' | 'all';
+
 // ------------------------------------------------------------------
 // Références (incluses dans la réponse API)
 // ------------------------------------------------------------------
@@ -74,6 +82,12 @@ export interface Programme {
 
   createdAt: string;
   updatedAt: string;
+
+  /** Date de soft delete (null si actif) */
+  deletedAt: string | null;
+
+  /** Raccourci UI : true si soft-deleted */
+  isDeleted: boolean;
 }
 
 // ------------------------------------------------------------------
@@ -121,6 +135,8 @@ export interface ListProgrammesParams {
   status?: ProgrammeStatus;
   q?: string;
   period?: 'upcoming' | 'past' | 'all';
+  /** Filtre sur les supprimés (soft delete) */
+  deleted?: DeletedFilter;
   page?: number;
   pageSize?: number;
 }

@@ -29,8 +29,10 @@ export interface RowAction<T = any> {
   label: string;
   /** Callback */
   onClick: (row: T) => void;
-  /** Condition d'affichage */
+  /** Condition d'affichage (déprécié : préfère `hidden`) */
   condition?: (row: T) => boolean;
+  /** Si true, l'action est CACHÉE pour cette ligne */
+  hidden?: (row: T) => boolean;
   /** Classes Tailwind (couleur, hover) */
   className?: string;
 }
@@ -63,4 +65,6 @@ export interface TableConfig<T = any> {
   rowKey?: keyof T | ((row: T) => string);
   /** Texte placeholder de la recherche */
   searchPlaceholder?: string;
+  /** Classe(s) CSS appliquée(s) à chaque <tr> */
+  rowClassName?: (row: T) => string;
 }
