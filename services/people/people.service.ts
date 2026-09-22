@@ -1,16 +1,13 @@
 // services/people/people.service.ts
 import { PEOPLE_ENDPOINTS } from '@/endpoints/people.endpoints';
 import { httpClient } from '@/services/core/http.service';
-import type {
-  CreatePersonPayload,
-  ListPeopleParams,
-  Person,
-  UpdatePersonPayload,
-} from '@/types/person.types';
-import type { PaginatedResponse } from '@/types/user.types';
+import { ListPeopleParams, PaginatedResponse, Person, CreatePersonPayload, UpdatePersonPayload } from '@/types';
+
 
 export const peopleService = {
-  async list(params: ListPeopleParams = {}): Promise<PaginatedResponse<Person>> {
+  async list(
+    params: ListPeopleParams = {},
+  ): Promise<PaginatedResponse<Person>> {
     const { data } = await httpClient.get<PaginatedResponse<Person>>(
       PEOPLE_ENDPOINTS.list,
       { params },
@@ -41,7 +38,21 @@ export const peopleService = {
 
   async remove(id: string): Promise<{ success: boolean }> {
     const { data } = await httpClient.delete<{ success: boolean }>(
-      PEOPLE_ENDPOINTS.detail(id),
+      PEOPLE_ENDPOINTS.remove(id),
+    );
+    return data;
+  },
+
+  async restore(id: string): Promise<Person> {
+    const { data } = await httpClient.patch<Person>(
+      PEOPLE_ENDPOINTS.restore(id),
+    );
+    return data;
+  },
+
+  async hardDelete(id: string): Promise<{ success: boolean }> {
+    const { data } = await httpClient.delete<{ success: boolean }>(
+      PEOPLE_ENDPOINTS.hardDelete(id),
     );
     return data;
   },

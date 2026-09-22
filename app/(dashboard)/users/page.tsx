@@ -1,20 +1,27 @@
 // app/(dashboard)/users/page.tsx
 'use client';
 
-import { Pencil, Plus, Trash2 } from 'lucide-react';
+import { Eye, KeyRound, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useTheme } from '@/components/providers/ThemeProvider';
 import DataTable from '@/components/ui/DataTable';
+import { useToast } from '@/components/ui/Toast';
+import UserCodeDialog from '@/components/users/UserCodeDialog';
 import UserFormDialog from '@/components/users/UserFormDialog';
+import { useConfirm } from '@/hooks/useConfirm';
+import { useAuth } from '@/contexts/AuthContext';
+import { peopleService } from '@/services';
 import { usersService } from '@/services/users/users.service';
+import type { Person } from '@/types/person.types';
 import type { Column, RowAction } from '@/types/table.types';
 import type { User } from '@/types/user.types';
-import { Person } from '@/types/person.types';
-import { peopleService } from '@/services';
 
 export default function UsersPage() {
   const { colors } = useTheme();
+  const toast = useToast();
+  const confirm = useConfirm();
+  const { user: currentUser } = useAuth();
 
   // ---- Données ----
   const [users, setUsers] = useState<User[]>([]);
@@ -25,6 +32,9 @@ export default function UsersPage() {
   // ---- Formulaire ----
   const [formOpen, setFormOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+
+  // ---- Dialog code ----
+  const [codeUser, setCodeUser] = useState<User | null>(null);
 
   // ---- Chargement ----
   const loadAll = useCallback(async () => {
@@ -39,59 +49,63 @@ export default function UsersPage() {
       setPeople(peopleRes.items);
     } catch {
       setError('Impossible de charger les utilisateurs.');
+      toast.error('Impossible de charger les utilisateurs.');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [toast]);
 
   useEffect(() => {
     loadAll();
   }, [loadAll]);
 
-  // Map personId -> fullName pour affichage
+  // Map personId -> fullName
   const personNameById = useMemo(() => {
     const map = new Map<string, string>();
     people.forEach((p) => map.set(p.id, p.fullName));
     return map;
   }, [people]);
 
+  // ⚠️ Filtre : exclut l'utilisateur connecté
+  const visibleUsers = useMemo(
+    () => users.filter((u) => u.id !== currentUser?.id),
+    [users, currentUser?.id],
+  );
+
   // ---- Colonnes ----
   const columns: Column<User>[] = useMemo(
     () => [
       {
-        key: 'code',
-        label: 'Code',
-        sortable: true,
-        width: '180px',
-        render: (value: string) => (
-          <span
-            className="font-mono text-xs font-bold tracking-widest"
-            style={{ color: colors.primary }}
-          >
-            {value}
-          </span>
-        ),
-      },
-      {
         key: 'role',
         label: 'Rôle',
         sortable: true,
-        width: '120px',
-        render: (value: string) => (
-          <span
-            className="inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-black tracking-widest"
-            style={{
-              backgroundColor:
-                value === 'ADMIN'
-                  ? colors.primary + '22'
-                  : colors.surfaceAlt,
-              borderColor:
-                value === 'ADMIN' ? colors.primary + '55' : colors.border,
-              color: value === 'ADMIN' ? colors.primary : colors.textSecondary,
-            }}
-          >
-            {value}
-          </span>
+        width: '130px',
+        render: (value: string, row: User) => (
+          <div className="flex items-center gap-2">
+            <span
+              className="inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-black tracking-widest"
+              style={{
+                backgroundColor:
+                  value === 'ADMIN'
+                    ? colors.primary + '22'
+                    : colors.surfaceAlt,
+                borderColor:
+                  value === 'ADMIN' ? colors.primary + '55' : colors.border,
+                color:
+                  value === 'ADMIN' ? colors.primary : colors.textSecondary,
+              }}
+            >
+              {value}
+            </span>
+            {row.id === currentUser?.id && (
+              <span
+                className="text-[9px] font-black tracking-widest"
+                style={{ color: colors.textMuted }}
+              >
+                (VOUS)
+              </span>
+            )}
+          </div>
         ),
       },
       {
@@ -123,12 +137,18 @@ export default function UsersPage() {
         ),
       },
     ],
-    [colors, personNameById],
+    [colors, personNameById, currentUser?.id],
   );
 
-  // ---- Actions par ligne ----
+  // ---- Actions ----
   const actions: RowAction<User>[] = useMemo(
     () => [
+      {
+        icon: Eye,
+        label: 'Voir le code',
+        onClick: (row) => setCodeUser(row),
+        className: 'hover:bg-blue-500/10 hover:text-blue-500',
+      },
       {
         icon: Pencil,
         label: 'Modifier',
@@ -139,7 +159,7 @@ export default function UsersPage() {
       },
       {
         icon: Trash2,
-        label: 'Supprimer',
+        label: 'Mettre à la corbeille',
         onClick: async (row) => {
           const personLabel = row.personId
             ? personNameById.get(row.personId)
@@ -148,24 +168,28 @@ export default function UsersPage() {
             ? `l'utilisateur lié à ${personLabel}`
             : `l'utilisateur ${row.id.slice(0, 8)}…`;
 
-          if (
-            !confirm(
-              `Supprimer ${label} ? Cette action est réversible côté backend (soft delete).`,
-            )
-          )
-            return;
+          const ok = await confirm({
+            title: 'Mettre à la corbeille ?',
+            message: `${label} sera déplacé dans la corbeille. Le compte ne pourra plus se connecter.`,
+            variant: 'warning',
+            confirmLabel: 'Mettre à la corbeille',
+          });
+          if (!ok) return;
 
           try {
             await usersService.remove(row.id);
-            setUsers((prev) => prev.filter((u) => u.id !== row.id));
+            toast.success('Utilisateur mis à la corbeille.', {
+              title: 'Utilisateur supprimé',
+            });
+            loadAll();
           } catch {
-            alert('Impossible de supprimer cet utilisateur.');
+            toast.error('Impossible de supprimer cet utilisateur.');
           }
         },
         className: 'hover:bg-red-500/10 hover:text-red-500',
       },
     ],
-    [personNameById],
+    [confirm, toast, loadAll, personNameById],
   );
 
   // ---- Handlers ----
@@ -182,8 +206,8 @@ export default function UsersPage() {
 
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-6">
-      {/* Titre + action */}
-      <div className="flex items-start justify-between">
+      {/* ═══════════ HEADER ═══════════ */}
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1
             className="text-2xl font-black tracking-wide"
@@ -214,7 +238,30 @@ export default function UsersPage() {
         </button>
       </div>
 
-      {/* Erreur */}
+      {/* ═══════════ BANDEAU INFO ═══════════ */}
+      <div
+        className="flex items-start gap-3 rounded-xl border p-3"
+        style={{
+          backgroundColor: colors.primary + '08',
+          borderColor: colors.primary + '33',
+        }}
+      >
+        <KeyRound
+          className="mt-0.5 h-4 w-4 shrink-0"
+          style={{ color: colors.primary }}
+        />
+        <p
+          className="text-xs leading-relaxed"
+          style={{ color: colors.textSecondary }}
+        >
+          <b style={{ color: colors.text }}>Codes d&apos;accès sécurisés.</b>{' '}
+          Les codes ne sont plus affichés dans le tableau. Cliquez sur{' '}
+          <Eye className="inline h-3 w-3" /> pour consulter le code d&apos;un
+          utilisateur. Votre propre compte n&apos;apparaît pas dans cette liste.
+        </p>
+      </div>
+
+      {/* ═══════════ ERREUR ═══════════ */}
       {error && (
         <div
           className="rounded-lg border p-3 text-sm"
@@ -228,14 +275,14 @@ export default function UsersPage() {
         </div>
       )}
 
-      {/* Tableau */}
+      {/* ═══════════ TABLE ═══════════ */}
       <DataTable
-        data={users}
+        data={visibleUsers}
         columns={columns}
         loading={loading}
         config={{
           searchable: true,
-          searchPlaceholder: 'Rechercher un code…',
+          searchPlaceholder: 'Rechercher un utilisateur…',
           pagination: true,
           defaultPageSize: 10,
           selectable: true,
@@ -244,7 +291,7 @@ export default function UsersPage() {
         }}
       />
 
-      {/* Formulaire (création / édition) */}
+      {/* ═══════════ FORMULAIRE ═══════════ */}
       <UserFormDialog
         open={formOpen}
         user={editingUser}
@@ -254,6 +301,18 @@ export default function UsersPage() {
           setEditingUser(null);
         }}
         onSuccess={handleFormSuccess}
+      />
+
+      {/* ═══════════ DIALOG CODE ═══════════ */}
+      <UserCodeDialog
+        open={!!codeUser}
+        user={codeUser}
+        personName={
+          codeUser?.personId
+            ? personNameById.get(codeUser.personId)
+            : null
+        }
+        onClose={() => setCodeUser(null)}
       />
     </div>
   );

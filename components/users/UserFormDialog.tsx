@@ -5,6 +5,8 @@ import { Check, Copy, Loader2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { useTheme } from '@/components/providers/ThemeProvider';
+import { useToast } from '@/components/ui/Toast';
+import { useConfirm } from '@/hooks/useConfirm';
 import { usersService } from '@/services/users/users.service';
 import type { UserRole } from '@/types/auth.types';
 import type { User } from '@/types/user.types';
@@ -26,17 +28,17 @@ export default function UserFormDialog({
   onSuccess,
 }: Props) {
   const { colors } = useTheme();
+  const toast = useToast();
+  const confirm = useConfirm();
 
   const [role, setRole] = useState<UserRole>('MEMBRE');
   const [personId, setPersonId] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // Étape 2 : après création, on affiche le code généré
   const [createdCode, setCreatedCode] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  // Reset à l'ouverture
   useEffect(() => {
     if (!open) return;
     if (user) {
@@ -54,18 +56,37 @@ export default function UserFormDialog({
   if (!open) return null;
 
   const isEditing = !!user;
+  const roleChanged = isEditing && user!.role !== role;
 
   // ------------------------------------------------------------------
-  // Submit (création ou édition)
+  // Submit
   // ------------------------------------------------------------------
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
-    // Règle backend : MEMBRE ⇒ personId obligatoire
     if (role === 'MEMBRE' && !personId) {
       setError('Un utilisateur MEMBRE doit être lié à une personne.');
       return;
+    }
+
+    // ⚠️ Confirmation si changement de rôle
+    if (roleChanged) {
+      const fromLabel = user!.role === 'ADMIN' ? 'Administrateur' : 'Membre';
+      const toLabel = role === 'ADMIN' ? 'Administrateur' : 'Membre';
+      const isPromotion = role === 'ADMIN';
+
+      const ok = await confirm({
+        title: isPromotion ? 'Promouvoir cet utilisateur ?' : 'Rétrograder cet utilisateur ?',
+        message: isPromotion
+          ? `Cet utilisateur passera de « ${fromLabel} » à « ${toLabel} ». Il aura accès à TOUTES les fonctionnalités d'administration.`
+          : `Cet utilisateur passera de « ${fromLabel} » à « ${toLabel} ». Il perdra l'accès à l'administration.`,
+        variant: isPromotion ? 'warning' : 'danger',
+        confirmLabel: isPromotion ? 'Promouvoir' : 'Rétrograder',
+        requireInput: !isPromotion, // rétrograder = tape "CONFIRMER"
+        confirmWord: !isPromotion ? 'CONFIRMER' : undefined,
+      });
+      if (!ok) return;
     }
 
     setSubmitting(true);
@@ -75,13 +96,15 @@ export default function UserFormDialog({
           role,
           personId: personId || null,
         });
+        toast.success('Utilisateur modifié avec succès.', {
+          title: 'Mise à jour',
+        });
         onSuccess();
       } else {
         const created = await usersService.create({
           role,
           personId: personId || null,
         });
-        // ⚠️ Le code n'apparaît qu'une seule fois (dans la réponse de création)
         setCreatedCode(created.code);
       }
     } catch (err: any) {
@@ -94,9 +117,6 @@ export default function UserFormDialog({
     }
   };
 
-  // ------------------------------------------------------------------
-  // Copier le code
-  // ------------------------------------------------------------------
   const handleCopyCode = async () => {
     if (!createdCode) return;
     try {
@@ -108,9 +128,6 @@ export default function UserFormDialog({
     }
   };
 
-  // ------------------------------------------------------------------
-  // Fermer après création (déclenche le refresh de la liste)
-  // ------------------------------------------------------------------
   const handleCloseAfterCreate = () => {
     setCreatedCode(null);
     onSuccess();
@@ -127,10 +144,8 @@ export default function UserFormDialog({
           borderColor: colors.border,
         }}
       >
-        {/* ------------------------------------------------------------
-            ÉCRAN DE SUCCÈS (après création)
-        ------------------------------------------------------------ */}
         {createdCode ? (
+          /* ═══════════ ÉCRAN DE SUCCÈS ═══════════ */
           <div className="flex flex-col gap-5 p-6">
             <div className="flex flex-col items-center gap-2 text-center">
               <div
@@ -154,7 +169,6 @@ export default function UserFormDialog({
               </p>
             </div>
 
-            {/* Code */}
             <div
               className="flex items-center justify-between gap-3 rounded-xl border-2 p-4"
               style={{
@@ -187,7 +201,6 @@ export default function UserFormDialog({
               </button>
             </div>
 
-            {/* Warning */}
             <div
               className="rounded-lg border p-3 text-xs"
               style={{
@@ -201,7 +214,6 @@ export default function UserFormDialog({
               l&apos;interface.
             </div>
 
-            {/* Action */}
             <button
               type="button"
               onClick={handleCloseAfterCreate}
@@ -215,11 +227,8 @@ export default function UserFormDialog({
             </button>
           </div>
         ) : (
-          /* ------------------------------------------------------------
-             FORMULAIRE (création / édition)
-          ------------------------------------------------------------ */
+          /* ═══════════ FORMULAIRE ═══════════ */
           <>
-            {/* Header */}
             <div
               className="flex items-center justify-between border-b p-5"
               style={{ borderColor: colors.border }}
@@ -238,7 +247,7 @@ export default function UserFormDialog({
                   style={{ color: colors.textSecondary }}
                 >
                   {isEditing
-                    ? `Code : ${user!.code}`
+                    ? 'Vous pouvez modifier le rôle et la personne liée.'
                     : 'Un code à 10 caractères sera généré automatiquement.'}
                 </p>
               </div>
@@ -252,7 +261,6 @@ export default function UserFormDialog({
               </button>
             </div>
 
-            {/* Form */}
             <form onSubmit={handleSubmit} className="flex flex-col gap-4 p-5">
               {/* Rôle */}
               <div className="flex flex-col gap-1.5">
@@ -288,6 +296,28 @@ export default function UserFormDialog({
                     );
                   })}
                 </div>
+
+                {/* Warning si changement de rôle */}
+                {roleChanged && (
+                  <div
+                    className="mt-1 flex items-start gap-2 rounded-lg border p-2.5 text-[11px]"
+                    style={{
+                      backgroundColor:
+                        (role === 'ADMIN' ? colors.warning : colors.danger) +
+                        '11',
+                      borderColor:
+                        (role === 'ADMIN' ? colors.warning : colors.danger) +
+                        '44',
+                      color:
+                        role === 'ADMIN' ? colors.warning : colors.danger,
+                    }}
+                  >
+                    ⚠️{' '}
+                    {role === 'ADMIN'
+                      ? 'Promotion en administrateur : accès complet.'
+                      : 'Rétrogradation : cet utilisateur perdra l\u2019accès administrateur.'}
+                  </div>
+                )}
               </div>
 
               {/* Personne liée */}

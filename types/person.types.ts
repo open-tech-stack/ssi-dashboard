@@ -1,4 +1,7 @@
 // types/person.types.ts
+
+import { DeletedFilter } from ".";
+
 export interface Person {
   id: string;
   firstName: string;
@@ -8,6 +11,12 @@ export interface Person {
   avatar: string | null;
   createdAt: string;
   updatedAt: string;
+
+  /** Date de soft delete (null si actif) */
+  deletedAt: string | null;
+
+  /** Raccourci UI : true si soft-deleted */
+  isDeleted: boolean;
 }
 
 export interface CreatePersonPayload {
@@ -28,6 +37,7 @@ export interface UpdatePersonPayload {
 
 export interface ListPeopleParams {
   q?: string;
+  deleted?: DeletedFilter;
   page?: number;
   pageSize?: number;
 }
