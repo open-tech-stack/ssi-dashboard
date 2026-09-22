@@ -1,10 +1,11 @@
+import { DeletedFilter } from "./evenement.types";
+
 // types/info.types.ts
 export type InfoPriority = 'NORMAL' | 'IMPORTANT' | 'URGENT';
 
 /**
  * Filtre sur les entités supprimées (soft delete).
  */
-export type DeletedFilter = 'active' | 'deleted' | 'all';
 
 export interface Info {
   id: string;
