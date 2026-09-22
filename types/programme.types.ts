@@ -1,3 +1,5 @@
+import { DeletedFilter } from ".";
+
 // types/programme.types.ts
 export type ProgrammeKind = 'CULTE_DIMANCHE' | 'PRIERE_VENDREDI';
 
@@ -19,13 +21,7 @@ export type ProgrammeStatus =
   | 'ANNULE'
   | 'EXPIRE';
 
-/**
- * Filtre sur les entités supprimées (soft delete).
- *  - active  : par défaut, seuls les non-supprimés
- *  - deleted : uniquement les supprimés (corbeille)
- *  - all     : tout (actifs + supprimés)
- */
-export type DeletedFilter = 'active' | 'deleted' | 'all';
+
 
 // ------------------------------------------------------------------
 // Références (incluses dans la réponse API)
