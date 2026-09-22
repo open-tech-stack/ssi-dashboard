@@ -24,7 +24,10 @@ export const infosService = {
   },
 
   async create(payload: CreateInfoPayload): Promise<Info> {
-    const { data } = await httpClient.post<Info>(INFOS_ENDPOINTS.list, payload);
+    const { data } = await httpClient.post<Info>(
+      INFOS_ENDPOINTS.list,
+      payload,
+    );
     return data;
   },
 
@@ -38,7 +41,21 @@ export const infosService = {
 
   async remove(id: string): Promise<{ success: boolean }> {
     const { data } = await httpClient.delete<{ success: boolean }>(
-      INFOS_ENDPOINTS.detail(id),
+      INFOS_ENDPOINTS.remove(id),
+    );
+    return data;
+  },
+
+  async restore(id: string): Promise<Info> {
+    const { data } = await httpClient.patch<Info>(
+      INFOS_ENDPOINTS.restore(id),
+    );
+    return data;
+  },
+
+  async hardDelete(id: string): Promise<{ success: boolean }> {
+    const { data } = await httpClient.delete<{ success: boolean }>(
+      INFOS_ENDPOINTS.hardDelete(id),
     );
     return data;
   },
