@@ -4,21 +4,38 @@
 import {
   Bell,
   CalendarDays,
+  Check,
   Heart,
   Info as InfoIcon,
   Megaphone,
   PartyPopper,
+  RotateCcw,
+  Skull,
+  Trash2,
   type LucideIcon,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import React from 'react';
+import React, { useState } from 'react';
 
 import { useTheme } from '@/components/providers/ThemeProvider';
-import type { Notification, NotificationType } from '@/types/notification.types';
+import type {
+  Notification,
+  NotificationType,
+} from '@/types/notification.types';
+import { cn } from '@/lib/utils';
 
 interface Props {
   notification: Notification;
+  /** Marquer comme lue (au clic ou via le bouton dédié) */
   onMarkRead?: (id: string) => void;
+  /** Soft delete (admin) */
+  onSoftDelete?: (n: Notification) => void;
+  /** Restore (admin) */
+  onRestore?: (n: Notification) => void;
+  /** Hard delete (admin) */
+  onHardDelete?: (n: Notification) => void;
+  /** Mode admin : affiche les actions destructives */
+  isAdmin?: boolean;
 }
 
 // ------------------------------------------------------------------
@@ -26,13 +43,19 @@ interface Props {
 // ------------------------------------------------------------------
 function iconOf(type: NotificationType): LucideIcon {
   switch (type) {
-    case 'PROGRAMME':  return CalendarDays;
-    case 'EVENEMENT':  return PartyPopper;
-    case 'INFO':       return Megaphone;
-    case 'PRIERE':     return Heart;
-    case 'RAPPEL':     return Bell;
+    case 'PROGRAMME':
+      return CalendarDays;
+    case 'EVENEMENT':
+      return PartyPopper;
+    case 'INFO':
+      return Megaphone;
+    case 'PRIERE':
+      return Heart;
+    case 'RAPPEL':
+      return Bell;
     case 'GENERIC':
-    default:           return InfoIcon;
+    default:
+      return InfoIcon;
   }
 }
 
@@ -41,13 +64,19 @@ function toneOf(
   colors: ReturnType<typeof useTheme>['colors'],
 ): string {
   switch (type) {
-    case 'PROGRAMME': return colors.primary;
-    case 'EVENEMENT': return colors.info;
-    case 'INFO':      return colors.primary;
-    case 'PRIERE':    return '#A855F7';
-    case 'RAPPEL':    return colors.warning;
+    case 'PROGRAMME':
+      return colors.primary;
+    case 'EVENEMENT':
+      return colors.info;
+    case 'INFO':
+      return colors.primary;
+    case 'PRIERE':
+      return '#A855F7';
+    case 'RAPPEL':
+      return colors.warning;
     case 'GENERIC':
-    default:          return colors.textSecondary;
+    default:
+      return colors.textSecondary;
   }
 }
 
@@ -57,12 +86,18 @@ function toneOf(
 function resolveDashboardRoute(linkTo: string): string | null {
   const segment = linkTo.split('/').filter(Boolean)[0];
   switch (segment) {
-    case 'programmes':  return '/programmes';
-    case 'evenements':  return '/evenements';
-    case 'infos':       return '/infos';
-    case 'prieres':     return '/prieres';
-    case 'rappels':     return '/rappels';
-    default:            return null;
+    case 'programmes':
+      return '/programmes';
+    case 'evenements':
+      return '/evenements';
+    case 'infos':
+      return '/infos';
+    case 'prieres':
+      return '/prieres';
+    case 'rappels':
+      return '/rappels';
+    default:
+      return null;
   }
 }
 
@@ -70,8 +105,18 @@ function resolveDashboardRoute(linkTo: string): string | null {
 // Date relative
 // ------------------------------------------------------------------
 const MONTHS_SHORT = [
-  'janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin',
-  'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.',
+  'janv.',
+  'févr.',
+  'mars',
+  'avr.',
+  'mai',
+  'juin',
+  'juil.',
+  'août',
+  'sept.',
+  'oct.',
+  'nov.',
+  'déc.',
 ];
 
 function relativeDate(iso: string): string {
@@ -93,15 +138,28 @@ function relativeDate(iso: string): string {
 // ------------------------------------------------------------------
 // Composant
 // ------------------------------------------------------------------
-export default function NotificationItem({ notification, onMarkRead }: Props) {
+export default function NotificationItem({
+  notification,
+  onMarkRead,
+  onSoftDelete,
+  onRestore,
+  onHardDelete,
+  isAdmin = false,
+}: Props) {
   const { colors } = useTheme();
   const router = useRouter();
+
+  const [hovered, setHovered] = useState(false);
 
   const Icon = iconOf(notification.type);
   const tone = toneOf(notification.type, colors);
   const isUnread = !notification.read;
+  const isDeleted = notification.isDeleted;
 
   const handleClick = () => {
+    // Ne pas naviguer ni marquer comme lu si supprimée
+    if (isDeleted) return;
+
     if (isUnread && onMarkRead) {
       onMarkRead(notification.id);
     }
@@ -114,33 +172,57 @@ export default function NotificationItem({ notification, onMarkRead }: Props) {
   return (
     <div
       onClick={handleClick}
-      className="group relative flex cursor-pointer items-start gap-3 overflow-hidden rounded-xl border p-4 pl-5 transition hover:translate-x-0.5 hover:opacity-95"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      className={cn(
+        'group relative flex items-start gap-3 overflow-hidden rounded-xl border p-4 pl-5 transition',
+        !isDeleted && 'cursor-pointer hover:translate-x-0.5',
+        isDeleted && 'opacity-60',
+      )}
       style={{
-        backgroundColor: isUnread ? colors.primary + '06' : colors.surface,
-        borderColor: isUnread ? colors.primary + '33' : colors.border,
+        backgroundColor: isDeleted
+          ? colors.surface
+          : isUnread
+            ? colors.primary + '06'
+            : colors.surface,
+        borderColor: isDeleted
+          ? colors.danger + '33'
+          : isUnread
+            ? colors.primary + '33'
+            : colors.border,
       }}
     >
       {/* Barre latérale colorée */}
       <div
-        className="absolute inset-y-0 left-0 w-1 transition-all group-hover:w-1.5"
+        className="absolute inset-y-0 left-0 transition-all"
         style={{
-          backgroundColor: isUnread ? tone : 'transparent',
+          width: hovered ? 6 : 4,
+          backgroundColor: isDeleted
+            ? colors.danger
+            : isUnread
+              ? tone
+              : 'transparent',
         }}
       />
 
       {/* Icône */}
       <div
         className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition-transform group-hover:scale-105"
-        style={{ backgroundColor: tone + '18' }}
+        style={{
+          backgroundColor: (isDeleted ? colors.danger : tone) + '18',
+        }}
       >
-        <Icon className="h-5 w-5" style={{ color: tone }} />
+        <Icon
+          className="h-5 w-5"
+          style={{ color: isDeleted ? colors.danger : tone }}
+        />
       </div>
 
       {/* Contenu */}
       <div className="flex flex-1 flex-col gap-1.5">
         <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-2">
-            {isUnread && (
+          <div className="flex flex-wrap items-center gap-2">
+            {isUnread && !isDeleted && (
               <span
                 className="h-2 w-2 shrink-0 rounded-full"
                 style={{ backgroundColor: tone }}
@@ -148,13 +230,31 @@ export default function NotificationItem({ notification, onMarkRead }: Props) {
               />
             )}
             <span
-              className={`text-sm leading-tight ${
-                isUnread ? 'font-extrabold' : 'font-bold'
-              }`}
-              style={{ color: colors.text }}
+              className={cn(
+                'text-sm leading-tight',
+                isUnread && !isDeleted ? 'font-extrabold' : 'font-bold',
+              )}
+              style={{
+                color: isDeleted ? colors.textMuted : colors.text,
+                textDecoration: isDeleted ? 'line-through' : 'none',
+              }}
             >
               {notification.title}
             </span>
+
+            {isDeleted && (
+              <span
+                className="inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[9px] font-black tracking-widest"
+                style={{
+                  backgroundColor: colors.danger + '11',
+                  borderColor: colors.danger + '44',
+                  color: colors.danger,
+                }}
+              >
+                <Skull className="h-2.5 w-2.5" />
+                SUPPRIMÉE
+              </span>
+            )}
           </div>
 
           <span
@@ -167,11 +267,112 @@ export default function NotificationItem({ notification, onMarkRead }: Props) {
 
         <p
           className="line-clamp-2 text-xs leading-relaxed"
-          style={{ color: colors.textSecondary }}
+          style={{
+            color: isDeleted ? colors.textMuted : colors.textSecondary,
+          }}
         >
           {notification.message}
         </p>
+
+        {/* Actions (au survol, admin seulement) */}
+        {isAdmin && hovered && (
+          <div className="mt-1 flex flex-wrap items-center gap-1">
+            {/* Marquer lu (uniquement si non lue et non supprimée) */}
+            {isUnread && !isDeleted && onMarkRead && (
+              <ActionBtn
+                icon={Check}
+                label="Marquer lu"
+                tone={colors.primary}
+                colors={colors}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onMarkRead(notification.id);
+                }}
+              />
+            )}
+
+            {/* Soft delete (uniquement si active) */}
+            {!isDeleted && onSoftDelete && (
+              <ActionBtn
+                icon={Trash2}
+                label="Supprimer"
+                tone={colors.warning}
+                colors={colors}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSoftDelete(notification);
+                }}
+              />
+            )}
+
+            {/* Restore (uniquement si supprimée) */}
+            {isDeleted && onRestore && (
+              <ActionBtn
+                icon={RotateCcw}
+                label="Restaurer"
+                tone={colors.success}
+                colors={colors}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRestore(notification);
+                }}
+              />
+            )}
+
+            {/* Hard delete (uniquement si supprimée) */}
+            {isDeleted && onHardDelete && (
+              <ActionBtn
+                icon={Skull}
+                label="Supprimer définitivement"
+                tone={colors.danger}
+                colors={colors}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onHardDelete(notification);
+                }}
+              />
+            )}
+          </div>
+        )}
       </div>
     </div>
+  );
+}
+
+// ------------------------------------------------------------------
+// Petit bouton d'action compact
+// ------------------------------------------------------------------
+function ActionBtn({
+  icon: Icon,
+  label,
+  tone,
+  colors,
+  onClick,
+}: {
+  icon: LucideIcon;
+  label: string;
+  tone: string;
+  colors: any;
+  onClick: (e: React.MouseEvent) => void;
+}) {
+  const [hover, setHover] = useState(false);
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      className="flex items-center gap-1.5 rounded-md border px-2 py-1 text-[10px] font-bold transition"
+      style={{
+        backgroundColor: hover ? tone + '22' : tone + '11',
+        borderColor: tone + '33',
+        color: tone,
+      }}
+      title={label}
+    >
+      <Icon className="h-3 w-3" />
+      {label}
+    </button>
   );
 }

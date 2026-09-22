@@ -1,12 +1,8 @@
 // services/notifications/notifications.service.ts
 import { NOTIFICATIONS_ENDPOINTS } from '@/endpoints/notifications.endpoints';
 import { httpClient } from '@/services/core/http.service';
-import type {
-  CreateNotificationPayload,
-  ListNotificationsParams,
-  Notification,
-} from '@/types/notification.types';
-import type { PaginatedResponse } from '@/types/user.types';
+import { ListNotificationsParams, PaginatedResponse, CreateNotificationPayload } from '@/types';
+
 
 export const notificationsService = {
   async list(
@@ -55,16 +51,29 @@ export const notificationsService = {
     return data;
   },
 
+  /**
+   * Soft delete (GLOBAL, admin uniquement).
+   * La notification disparaît pour tous les utilisateurs.
+   */
   async remove(id: string): Promise<{ success: boolean }> {
     const { data } = await httpClient.delete<{ success: boolean }>(
-      NOTIFICATIONS_ENDPOINTS.detail(id),
+      NOTIFICATIONS_ENDPOINTS.remove(id),
     );
     return data;
   },
 
-  async removeAllRead(): Promise<{ success: boolean; count: number }> {
-    const { data } = await httpClient.delete<{ success: boolean; count: number }>(
-      NOTIFICATIONS_ENDPOINTS.deleteRead,
+  /** Restaure une notification soft-deleted (admin). */
+  async restore(id: string): Promise<Notification> {
+    const { data } = await httpClient.patch<Notification>(
+      NOTIFICATIONS_ENDPOINTS.restore(id),
+    );
+    return data;
+  },
+
+  /** Suppression définitive, irréversible (admin). */
+  async hardDelete(id: string): Promise<{ success: boolean }> {
+    const { data } = await httpClient.delete<{ success: boolean }>(
+      NOTIFICATIONS_ENDPOINTS.hardDelete(id),
     );
     return data;
   },

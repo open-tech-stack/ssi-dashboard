@@ -10,3 +10,4 @@ export * from './info.types';
 export * from './priere.types';
 export * from './rappel.types';
 export * from './notification.types';
+

@@ -1,19 +1,23 @@
 // app/(dashboard)/notifications/page.tsx
 'use client';
 
-import { CheckCheck, Loader2, Trash2 } from 'lucide-react';
+import { CheckCheck, Loader2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import NotificationFilters, {
+  type ReadFilter,
+} from '@/components/notifications/NotificationFilters';
 import NotificationItem from '@/components/notifications/NotificationItem';
 import { useTheme } from '@/components/providers/ThemeProvider';
+import { useToast } from '@/components/ui/Toast';
+import { useConfirm } from '@/hooks/useConfirm';
 import { useUnreadCount } from '@/hooks/useUnreadCount';
 import { notificationsService } from '@/services/notifications/notifications.service';
 import type {
   Notification,
   NotificationType,
 } from '@/types/notification.types';
-
-type ReadFilter = 'all' | 'unread' | 'read';
+import { DeletedFilter } from '@/types';
 
 // ------------------------------------------------------------------
 // Helpers
@@ -38,14 +42,20 @@ function groupLabel(iso: string): string {
 // ------------------------------------------------------------------
 export default function NotificationsPage() {
   const { colors } = useTheme();
+  const toast = useToast();
+  const confirm = useConfirm();
   const { refresh: refreshUnread } = useUnreadCount();
 
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Filtres
   const [readFilter, setReadFilter] = useState<ReadFilter>('all');
   const [typeFilter, setTypeFilter] = useState<NotificationType | ''>('');
+  const [deletedFilter, setDeletedFilter] =
+    useState<DeletedFilter>('active');
+
   const [markingAll, setMarkingAll] = useState(false);
 
   // ---- Chargement ----
@@ -56,23 +66,35 @@ export default function NotificationsPage() {
       const params: Record<string, unknown> = {
         page: 1,
         pageSize: 200,
+        deleted: deletedFilter,
       };
       if (typeFilter) params.type = typeFilter;
       if (readFilter === 'unread') params.read = false;
       if (readFilter === 'read') params.read = true;
 
       const res = await notificationsService.list(params);
-      setNotifications(res.items);
+      setNotifications(res.items as unknown as Notification[]);
     } catch {
       setError('Impossible de charger les notifications.');
+      toast.error('Impossible de charger les notifications.');
     } finally {
       setLoading(false);
     }
-  }, [readFilter, typeFilter]);
+  }, [readFilter, typeFilter, deletedFilter, toast]);
 
   useEffect(() => {
     loadAll();
   }, [loadAll]);
+
+  // ---- Stats ----
+  const stats = useMemo(() => {
+    const active = notifications.filter((n) => !n.isDeleted).length;
+    const deleted = notifications.filter((n) => n.isDeleted).length;
+    const unread = notifications.filter(
+      (n) => !n.read && !n.isDeleted,
+    ).length;
+    return { active, deleted, total: notifications.length, unread };
+  }, [notifications]);
 
   // ---- Actions ----
   const handleMarkRead = useCallback(
@@ -93,41 +115,112 @@ export default function NotificationsPage() {
   const handleMarkAllRead = async () => {
     setMarkingAll(true);
     try {
-      await notificationsService.markAllRead();
-      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+      const res = await notificationsService.markAllRead();
+      setNotifications((prev) =>
+        prev.map((n) => (n.isDeleted ? n : { ...n, read: true })),
+      );
       refreshUnread();
+      toast.success(
+        `${res.count} notification${res.count > 1 ? 's' : ''} marquée${res.count > 1 ? 's' : ''} comme lue${res.count > 1 ? 's' : ''}.`,
+        { title: 'Tout marqué lu' },
+      );
     } catch {
-      alert('Impossible de marquer toutes les notifications.');
+      toast.error('Impossible de marquer toutes les notifications.');
     } finally {
       setMarkingAll(false);
     }
   };
 
-  const handleRemoveAllRead = async () => {
-    if (
-      !confirm(
-        'Supprimer toutes les notifications lues ? Cette action est irréversible.',
-      )
-    )
-      return;
+  // ---- Soft delete (admin) ----
+  const handleSoftDelete = useCallback(
+    async (n: Notification) => {
+      const ok = await confirm({
+        title: 'Supprimer cette notification ?',
+        message: `« ${n.title} » sera masquée POUR TOUS les utilisateurs. Vous pourrez la restaurer plus tard.`,
+        variant: 'warning',
+        confirmLabel: 'Supprimer',
+      });
+      if (!ok) return;
 
-    try {
-      await notificationsService.removeAllRead();
-      setNotifications((prev) => prev.filter((n) => !n.read));
-      refreshUnread();
-    } catch {
-      alert('Impossible de supprimer les notifications lues.');
-    }
-  };
+      try {
+        await notificationsService.remove(n.id);
+        toast.success(`« ${n.title} » supprimée.`, {
+          title: 'Notification supprimée',
+          action: {
+            label: 'Annuler',
+            onClick: async () => {
+              try {
+                await notificationsService.restore(n.id);
+                toast.info('Notification restaurée.');
+                loadAll();
+              } catch {
+                toast.error('Impossible de restaurer.');
+              }
+            },
+          },
+        });
+        loadAll();
+        refreshUnread();
+      } catch {
+        toast.error('Impossible de supprimer.');
+      }
+    },
+    [confirm, toast, loadAll, refreshUnread],
+  );
 
-  // ---- Stats ----
-  const stats = useMemo(() => {
-    const total = notifications.length;
-    const unread = notifications.filter((n) => !n.read).length;
-    return { total, unread };
-  }, [notifications]);
+  // ---- Restore (admin) ----
+  const handleRestore = useCallback(
+    async (n: Notification) => {
+      const ok = await confirm({
+        title: 'Restaurer cette notification ?',
+        message: `« ${n.title} » redeviendra visible pour tous les utilisateurs.`,
+        variant: 'info',
+        confirmLabel: 'Restaurer',
+      });
+      if (!ok) return;
 
-  // ---- Groupement par date ----
+      try {
+        await notificationsService.restore(n.id);
+        toast.success(`« ${n.title} » restaurée.`, {
+          title: 'Notification restaurée',
+        });
+        loadAll();
+        refreshUnread();
+      } catch {
+        toast.error('Impossible de restaurer.');
+      }
+    },
+    [confirm, toast, loadAll, refreshUnread],
+  );
+
+  // ---- Hard delete (admin) ----
+  const handleHardDelete = useCallback(
+    async (n: Notification) => {
+      const ok = await confirm({
+        title: '⚠️ Suppression DÉFINITIVE',
+        message: `« ${n.title} » sera définitivement supprimée. Cette action est IRRÉVERSIBLE.`,
+        variant: 'danger',
+        confirmLabel: 'Supprimer définitivement',
+        requireInput: true,
+        confirmWord: 'SUPPRIMER',
+      });
+      if (!ok) return;
+
+      try {
+        await notificationsService.hardDelete(n.id);
+        toast.success(`« ${n.title} » supprimée définitivement.`, {
+          title: 'Notification supprimée',
+          duration: 5000,
+        });
+        loadAll();
+      } catch {
+        toast.error('Impossible de supprimer définitivement.');
+      }
+    },
+    [confirm, toast, loadAll],
+  );
+
+  // ---- Groupement par date (exclut les supprimées) ----
   const grouped = useMemo(() => {
     const groups = new Map<string, Notification[]>();
     const order = ["Aujourd'hui", 'Hier', 'Cette semaine', 'Plus ancien'];
@@ -186,84 +279,24 @@ export default function NotificationsPage() {
             )}
             Tout marquer lu
           </button>
-
-          <button
-            type="button"
-            onClick={handleRemoveAllRead}
-            disabled={notifications.filter((n) => n.read).length === 0}
-            className="flex h-10 items-center gap-2 rounded-lg border px-3 text-xs font-bold transition hover:bg-red-500/10 hover:text-red-500 disabled:opacity-40"
-            style={{
-              borderColor: colors.border,
-              color: colors.textSecondary,
-              backgroundColor: colors.surface,
-            }}
-          >
-            <Trash2 className="h-4 w-4" />
-            Supprimer les lues
-          </button>
         </div>
       </div>
 
       {/* ═══════════ FILTRES ═══════════ */}
-      <div
-        className="flex flex-wrap items-center gap-3 rounded-xl border p-3"
-        style={{
-          backgroundColor: colors.surface,
-          borderColor: colors.border,
+      <NotificationFilters
+        readFilter={readFilter}
+        onReadFilterChange={setReadFilter}
+        typeFilter={typeFilter}
+        onTypeFilterChange={setTypeFilter}
+        deletedFilter={deletedFilter}
+        onDeletedFilterChange={setDeletedFilter}
+        counts={{
+          active: stats.active,
+          deleted: stats.deleted,
+          total: stats.total,
         }}
-      >
-        {/* Read filter (segmented) */}
-        <div
-          className="flex rounded-lg border p-0.5"
-          style={{
-            backgroundColor: colors.surfaceAlt,
-            borderColor: colors.border,
-          }}
-        >
-          {(['all', 'unread', 'read'] as ReadFilter[]).map((r) => {
-            const active = readFilter === r;
-            const label =
-              r === 'all' ? 'Toutes' : r === 'unread' ? 'Non lues' : 'Lues';
-            return (
-              <button
-                key={r}
-                type="button"
-                onClick={() => setReadFilter(r)}
-                className="h-7 rounded-md px-3 text-xs font-bold transition"
-                style={{
-                  backgroundColor: active ? colors.surface : 'transparent',
-                  color: active ? colors.text : colors.textSecondary,
-                  boxShadow: active ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
-                }}
-              >
-                {label}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Type filter */}
-        <select
-          value={typeFilter}
-          onChange={(e) =>
-            setTypeFilter(e.target.value as NotificationType | '')
-          }
-          className="h-8 rounded-md border px-3 text-xs font-bold outline-none"
-          style={{
-            backgroundColor: colors.surfaceAlt,
-            borderColor: colors.border,
-            color: colors.text,
-          }}
-        >
-          <option value="">Tous les types</option>
-          <option value="PROGRAMME">Programme</option>
-          <option value="EVENEMENT">Événement</option>
-          <option value="INFO">Info</option>
-          <option value="PRIERE">Prière</option>
-          <option value="RAPPEL">Rappel</option>
-          <option value="GENERIC">Générique</option>
-        </select>
-      </div>
+        showDeletedFilter
+      />
 
       {/* ═══════════ ERREUR ═══════════ */}
       {error && (
@@ -310,13 +343,12 @@ export default function NotificationsPage() {
           <p className="text-sm font-bold" style={{ color: colors.text }}>
             Aucune notification
           </p>
-          <p
-            className="mt-1 text-xs"
-            style={{ color: colors.textSecondary }}
-          >
+          <p className="mt-1 text-xs" style={{ color: colors.textSecondary }}>
             {readFilter === 'unread'
               ? 'Toutes les notifications sont lues.'
-              : 'Les notifications apparaîtront ici.'}
+              : deletedFilter === 'deleted'
+                ? 'Aucune notification dans la corbeille.'
+                : 'Les notifications apparaîtront ici.'}
           </p>
         </div>
       ) : (
@@ -349,6 +381,10 @@ export default function NotificationsPage() {
                   key={n.id}
                   notification={n}
                   onMarkRead={handleMarkRead}
+                  onSoftDelete={handleSoftDelete}
+                  onRestore={handleRestore}
+                  onHardDelete={handleHardDelete}
+                  isAdmin
                 />
               ))}
             </div>

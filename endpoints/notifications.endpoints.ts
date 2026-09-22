@@ -5,5 +5,7 @@ export const NOTIFICATIONS_ENDPOINTS = {
   detail: (id: string) => `/notifications/${id}`,
   markRead: (id: string) => `/notifications/${id}/read`,
   markAllRead: '/notifications/read-all',
-  deleteRead: '/notifications/read',
+  remove: (id: string) => `/notifications/${id}`,
+  restore: (id: string) => `/notifications/${id}/restore`,
+  hardDelete: (id: string) => `/notifications/${id}/permanent`,
 } as const;

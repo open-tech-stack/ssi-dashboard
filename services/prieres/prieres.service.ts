@@ -1,13 +1,8 @@
 // services/prieres/prieres.service.ts
-import { PRIERES_ENDPOINTS } from '@/endpoints/prieres.endpoints';
-import { httpClient } from '@/services/core/http.service';
-import type {
-  CreatePrierePayload,
-  ListPrieresParams,
-  Priere,
-  UpdatePrierePayload,
-} from '@/types/priere.types';
-import type { PaginatedResponse } from '@/types/user.types';
+import { PRIERES_ENDPOINTS } from '@/endpoints';
+import { ListPrieresParams, PaginatedResponse, Priere, CreatePrierePayload, UpdatePrierePayload } from '@/types';
+import { httpClient } from '../core/http.service';
+
 
 export const prieresService = {
   async list(
@@ -45,7 +40,21 @@ export const prieresService = {
 
   async remove(id: string): Promise<{ success: boolean }> {
     const { data } = await httpClient.delete<{ success: boolean }>(
-      PRIERES_ENDPOINTS.detail(id),
+      PRIERES_ENDPOINTS.remove(id),
+    );
+    return data;
+  },
+
+  async restore(id: string): Promise<Priere> {
+    const { data } = await httpClient.patch<Priere>(
+      PRIERES_ENDPOINTS.restore(id),
+    );
+    return data;
+  },
+
+  async hardDelete(id: string): Promise<{ success: boolean }> {
+    const { data } = await httpClient.delete<{ success: boolean }>(
+      PRIERES_ENDPOINTS.hardDelete(id),
     );
     return data;
   },

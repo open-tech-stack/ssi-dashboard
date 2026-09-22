@@ -1,13 +1,8 @@
 // services/rappels/rappels.service.ts
 import { RAPPELS_ENDPOINTS } from '@/endpoints/rappels.endpoints';
 import { httpClient } from '@/services/core/http.service';
-import type {
-  CreateRappelPayload,
-  ListRappelsParams,
-  Rappel,
-  UpdateRappelPayload,
-} from '@/types/rappel.types';
-import type { PaginatedResponse } from '@/types/user.types';
+import { ListRappelsParams, PaginatedResponse, Rappel, CreateRappelPayload, UpdateRappelPayload } from '@/types';
+
 
 export const rappelsService = {
   async list(
@@ -45,7 +40,21 @@ export const rappelsService = {
 
   async remove(id: string): Promise<{ success: boolean }> {
     const { data } = await httpClient.delete<{ success: boolean }>(
-      RAPPELS_ENDPOINTS.detail(id),
+      RAPPELS_ENDPOINTS.remove(id),
+    );
+    return data;
+  },
+
+  async restore(id: string): Promise<Rappel> {
+    const { data } = await httpClient.patch<Rappel>(
+      RAPPELS_ENDPOINTS.restore(id),
+    );
+    return data;
+  },
+
+  async hardDelete(id: string): Promise<{ success: boolean }> {
+    const { data } = await httpClient.delete<{ success: boolean }>(
+      RAPPELS_ENDPOINTS.hardDelete(id),
     );
     return data;
   },
